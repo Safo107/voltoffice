@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
     }
 
     const priceId = process.env.STRIPE_PRICE_ID;
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://voltoffice.elektrogenius.de";
 
     if (!priceId) {
       return NextResponse.json({ error: "STRIPE_PRICE_ID nicht konfiguriert" }, { status: 500 });
