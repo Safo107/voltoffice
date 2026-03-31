@@ -41,6 +41,13 @@ export default function ProjektePage() {
 
   useEffect(() => { fetchProjekte(); }, []);
 
+  useEffect(() => {
+    if (!menuOpen) return;
+    const close = () => setMenuOpen(null);
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, [menuOpen]);
+
   const fetchProjekte = async () => {
     setLoading(true);
     try {
@@ -180,7 +187,7 @@ export default function ProjektePage() {
                       {sc.label}
                     </span>
                     <button className="p-1 rounded transition-all" style={{ color: "#8b9ab5" }}
-                      onClick={() => setMenuOpen(menuOpen === id ? null : id)}
+                      onClick={(e) => { e.stopPropagation(); setMenuOpen(menuOpen === id ? null : id); }}
                       onMouseEnter={(e) => { e.currentTarget.style.color = "#e6edf3"; }}
                       onMouseLeave={(e) => { e.currentTarget.style.color = "#8b9ab5"; }}>
                       <MoreVertical size={14} />

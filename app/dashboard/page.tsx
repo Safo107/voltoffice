@@ -1,8 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import StatCard from "@/components/dashboard/StatCard";
+import Modal from "@/components/ui/Modal";
 import {
   Users,
   FileText,
@@ -62,6 +64,7 @@ const openOffers = [
 
 export default function DashboardPage() {
   const router = useRouter();
+  const [activityModal, setActivityModal] = useState(false);
   return (
     <DashboardLayout
       title="Dashboard"
@@ -123,6 +126,7 @@ export default function DashboardPage() {
               Letzte Aktivitäten
             </h2>
             <button
+              onClick={() => setActivityModal(true)}
               className="flex items-center gap-1 text-xs transition-colors"
               style={{ color: "#00c6ff" }}
               onMouseEnter={(e) => { e.currentTarget.style.color = "#00c6ffcc"; }}
@@ -307,6 +311,34 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+      <Modal open={activityModal} onClose={() => setActivityModal(false)} title="Alle Aktivitäten">
+        <div className="space-y-2">
+          {recentActivity.map((item) => (
+            <div
+              key={item.id}
+              className="flex items-center gap-3 p-3 rounded-lg"
+              style={{ background: "#0d1b2e", border: "1px solid #1e3a5f" }}
+            >
+              <div
+                className="flex items-center justify-center w-7 h-7 rounded-lg shrink-0"
+                style={{ background: `${item.color}22`, color: item.color }}
+              >
+                {item.icon}
+              </div>
+              <p className="flex-1 text-sm" style={{ color: "#e6edf3" }}>{item.text}</p>
+              <div className="flex flex-col items-end gap-1 shrink-0">
+                <span
+                  className="text-xs px-2 py-0.5 rounded-full"
+                  style={{ background: `${item.color}22`, color: item.color, border: `1px solid ${item.color}44` }}
+                >
+                  {item.statusLabel}
+                </span>
+                <span className="text-xs" style={{ color: "#4a5568" }}>{item.time}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Modal>
     </DashboardLayout>
   );
 }

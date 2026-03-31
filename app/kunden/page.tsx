@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Modal from "@/components/ui/Modal";
 import EmptyState from "@/components/ui/EmptyState";
@@ -53,6 +53,13 @@ export default function KundenPage() {
   useEffect(() => {
     fetchKunden();
   }, []);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const close = () => setMenuOpen(null);
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, [menuOpen]);
 
   const fetchKunden = async () => {
     setLoading(true);
@@ -200,11 +207,11 @@ export default function KundenPage() {
         />
       ) : (
         <div
-          className="rounded-xl overflow-hidden"
+          className="rounded-xl"
           style={{ border: "1px solid #1e3a5f" }}
         >
           <div
-            className="grid grid-cols-12 px-4 py-3 text-xs font-semibold uppercase tracking-wider"
+            className="grid grid-cols-12 px-4 py-3 text-xs font-semibold uppercase tracking-wider rounded-t-xl"
             style={{ background: "#112240", color: "#8b9ab5", borderBottom: "1px solid #1e3a5f" }}
           >
             <div className="col-span-4">Name / Firma</div>
@@ -223,6 +230,7 @@ export default function KundenPage() {
                 style={{
                   background: i % 2 === 0 ? "#0d1b2e" : "#112240",
                   borderBottom: i < filtered.length - 1 ? "1px solid #1e3a5f44" : "none",
+                  ...(i === filtered.length - 1 ? { borderRadius: "0 0 0.75rem 0.75rem" } : {}),
                 }}
                 onMouseEnter={(e) => { e.currentTarget.style.background = "#00c6ff08"; }}
                 onMouseLeave={(e) => { e.currentTarget.style.background = i % 2 === 0 ? "#0d1b2e" : "#112240"; }}
@@ -262,7 +270,7 @@ export default function KundenPage() {
 
                 <div className="col-span-1 flex justify-end relative">
                   <button
-                    onClick={() => setMenuOpen(menuOpen === id ? null : id)}
+                    onClick={(e) => { e.stopPropagation(); setMenuOpen(menuOpen === id ? null : id); }}
                     className="p-1.5 rounded-lg transition-all"
                     style={{ color: "#8b9ab5" }}
                     onMouseEnter={(e) => { e.currentTarget.style.background = "#1e3a5f"; e.currentTarget.style.color = "#e6edf3"; }}

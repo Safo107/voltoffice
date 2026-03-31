@@ -8,9 +8,9 @@ import {
   Shield,
   CreditCard,
   ChevronRight,
-  Lock,
   Zap,
   Check,
+  CheckCircle,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -22,11 +22,73 @@ const sections = [
   { id: "abo", label: "Abo & Abrechnung", icon: <CreditCard size={16} />, color: "#f5a623" },
 ];
 
+function SaveFeedback({ visible }: { visible: boolean }) {
+  if (!visible) return null;
+  return (
+    <div className="flex items-center gap-2 text-sm" style={{ color: "#22c55e" }}>
+      <CheckCircle size={15} />
+      Gespeichert
+    </div>
+  );
+}
+
+function inputStyle(focused = false) {
+  return {
+    background: "#0d1b2e",
+    border: `1px solid ${focused ? "#00c6ff66" : "#1e3a5f"}`,
+    color: "#e6edf3",
+  };
+}
+
 export default function EinstellungenPage() {
   const [active, setActive] = useState("profil");
+
+  // Profil
   const [companyName, setCompanyName] = useState("Musterbetrieb GmbH");
   const [email, setEmail] = useState("max@musterbetrieb.de");
   const [phone, setPhone] = useState("030 12345678");
+  const [profilSaved, setProfilSaved] = useState(false);
+
+  // Firmendaten
+  const [firma, setFirma] = useState({
+    name: "Musterbetrieb GmbH",
+    ustId: "",
+    handelsreg: "",
+    street: "Musterstraße 1",
+    zip: "10115",
+    city: "Berlin",
+    website: "",
+  });
+  const [firmaSaved, setFirmaSaved] = useState(false);
+
+  // Benachrichtigungen
+  const [notif, setNotif] = useState({
+    email: true,
+    newOffers: true,
+    projectUpdates: false,
+    paymentReminders: true,
+    weeklyReport: false,
+  });
+  const [notifSaved, setNotifSaved] = useState(false);
+
+  // Sicherheit
+  const [pw, setPw] = useState({ current: "", newPw: "", confirm: "" });
+  const [pwError, setPwError] = useState("");
+  const [pwSaved, setPwSaved] = useState(false);
+
+  const save = (setter: (v: boolean) => void) => {
+    setter(true);
+    setTimeout(() => setter(false), 2500);
+  };
+
+  const handlePwSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPwError("");
+    if (pw.newPw.length < 8) { setPwError("Neues Passwort muss mindestens 8 Zeichen haben."); return; }
+    if (pw.newPw !== pw.confirm) { setPwError("Passwörter stimmen nicht überein."); return; }
+    setPw({ current: "", newPw: "", confirm: "" });
+    save(setPwSaved);
+  };
 
   return (
     <DashboardLayout title="Einstellungen" subtitle="Konto & Betrieb verwalten">
@@ -70,15 +132,11 @@ export default function EinstellungenPage() {
 
         {/* Content */}
         <div className="flex-1">
+
+          {/* ── Profil ── */}
           {active === "profil" && (
-            <div
-              className="rounded-xl p-6"
-              style={{ background: "#112240", border: "1px solid #1e3a5f" }}
-            >
-              <h2
-                className="text-base font-bold mb-5"
-                style={{ color: "#e6edf3", fontFamily: "var(--font-syne)" }}
-              >
+            <div className="rounded-xl p-6" style={{ background: "#112240", border: "1px solid #1e3a5f" }}>
+              <h2 className="text-base font-bold mb-5" style={{ color: "#e6edf3", fontFamily: "var(--font-syne)" }}>
                 Profil & Betrieb
               </h2>
               <div className="space-y-4">
@@ -96,40 +154,260 @@ export default function EinstellungenPage() {
                       value={field.value}
                       onChange={(e) => field.setter(e.target.value)}
                       className="w-full px-4 py-3 rounded-xl text-sm outline-none transition-all"
-                      style={{
-                        background: "#0d1b2e",
-                        border: "1px solid #1e3a5f",
-                        color: "#e6edf3",
-                      }}
+                      style={inputStyle()}
                       onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
                       onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
                     />
                   </div>
                 ))}
-                <button
-                  className="px-5 py-2.5 rounded-xl text-sm font-semibold transition-all hover:opacity-90 mt-2"
-                  style={{
-                    background: "linear-gradient(135deg, #00c6ff, #0099cc)",
-                    color: "#0d1b2e",
-                  }}
-                >
-                  Änderungen speichern
-                </button>
+                <div className="flex items-center gap-4 pt-1">
+                  <button
+                    onClick={() => save(setProfilSaved)}
+                    className="px-5 py-2.5 rounded-xl text-sm font-semibold transition-all hover:opacity-90"
+                    style={{ background: "linear-gradient(135deg, #00c6ff, #0099cc)", color: "#0d1b2e" }}
+                  >
+                    Änderungen speichern
+                  </button>
+                  <SaveFeedback visible={profilSaved} />
+                </div>
               </div>
             </div>
           )}
 
+          {/* ── Firmendaten ── */}
+          {active === "firma" && (
+            <div className="rounded-xl p-6" style={{ background: "#112240", border: "1px solid #1e3a5f" }}>
+              <h2 className="text-base font-bold mb-5" style={{ color: "#e6edf3", fontFamily: "var(--font-syne)" }}>
+                Firmendaten
+              </h2>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Firmenname</label>
+                  <input
+                    value={firma.name}
+                    onChange={(e) => setFirma({ ...firma, name: e.target.value })}
+                    placeholder="Musterbetrieb GmbH"
+                    className="w-full px-4 py-3 rounded-xl text-sm outline-none"
+                    style={inputStyle()}
+                    onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
+                    onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>USt-IdNr.</label>
+                    <input
+                      value={firma.ustId}
+                      onChange={(e) => setFirma({ ...firma, ustId: e.target.value })}
+                      placeholder="DE123456789"
+                      className="w-full px-4 py-3 rounded-xl text-sm outline-none"
+                      style={inputStyle()}
+                      onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
+                      onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Handelsregister-Nr.</label>
+                    <input
+                      value={firma.handelsreg}
+                      onChange={(e) => setFirma({ ...firma, handelsreg: e.target.value })}
+                      placeholder="HRB 12345"
+                      className="w-full px-4 py-3 rounded-xl text-sm outline-none"
+                      style={inputStyle()}
+                      onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
+                      onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Straße & Hausnummer</label>
+                  <input
+                    value={firma.street}
+                    onChange={(e) => setFirma({ ...firma, street: e.target.value })}
+                    placeholder="Musterstraße 1"
+                    className="w-full px-4 py-3 rounded-xl text-sm outline-none"
+                    style={inputStyle()}
+                    onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
+                    onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>PLZ</label>
+                    <input
+                      value={firma.zip}
+                      onChange={(e) => setFirma({ ...firma, zip: e.target.value })}
+                      placeholder="10115"
+                      className="w-full px-4 py-3 rounded-xl text-sm outline-none"
+                      style={inputStyle()}
+                      onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
+                      onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Stadt</label>
+                    <input
+                      value={firma.city}
+                      onChange={(e) => setFirma({ ...firma, city: e.target.value })}
+                      placeholder="Berlin"
+                      className="w-full px-4 py-3 rounded-xl text-sm outline-none"
+                      style={inputStyle()}
+                      onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
+                      onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Webseite</label>
+                  <input
+                    value={firma.website}
+                    onChange={(e) => setFirma({ ...firma, website: e.target.value })}
+                    placeholder="https://musterbetrieb.de"
+                    type="url"
+                    className="w-full px-4 py-3 rounded-xl text-sm outline-none"
+                    style={inputStyle()}
+                    onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
+                    onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
+                  />
+                </div>
+                <div className="flex items-center gap-4 pt-1">
+                  <button
+                    onClick={() => save(setFirmaSaved)}
+                    className="px-5 py-2.5 rounded-xl text-sm font-semibold transition-all hover:opacity-90"
+                    style={{ background: "linear-gradient(135deg, #f5a623, #c4841c)", color: "#0d1b2e" }}
+                  >
+                    Firmendaten speichern
+                  </button>
+                  <SaveFeedback visible={firmaSaved} />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Benachrichtigungen ── */}
+          {active === "benachrichtigungen" && (
+            <div className="rounded-xl p-6" style={{ background: "#112240", border: "1px solid #1e3a5f" }}>
+              <h2 className="text-base font-bold mb-5" style={{ color: "#e6edf3", fontFamily: "var(--font-syne)" }}>
+                Benachrichtigungen
+              </h2>
+              <div className="space-y-3">
+                {[
+                  { key: "email" as const, label: "E-Mail Benachrichtigungen", desc: "Allgemeine E-Mails zum Konto" },
+                  { key: "newOffers" as const, label: "Neue Angebote", desc: "Benachrichtigung bei neuen Angeboten" },
+                  { key: "projectUpdates" as const, label: "Projektupdates", desc: "Statusänderungen bei Projekten" },
+                  { key: "paymentReminders" as const, label: "Zahlungserinnerungen", desc: "Offene Rechnungen & Fälligkeiten" },
+                  { key: "weeklyReport" as const, label: "Wochenbericht", desc: "Zusammenfassung jeden Montag" },
+                ].map((item) => (
+                  <div
+                    key={item.key}
+                    className="flex items-center justify-between p-4 rounded-xl"
+                    style={{ background: "#0d1b2e", border: "1px solid #1e3a5f" }}
+                  >
+                    <div>
+                      <p className="text-sm font-medium" style={{ color: "#e6edf3" }}>{item.label}</p>
+                      <p className="text-xs mt-0.5" style={{ color: "#8b9ab5" }}>{item.desc}</p>
+                    </div>
+                    <button
+                      onClick={() => setNotif({ ...notif, [item.key]: !notif[item.key] })}
+                      className="relative w-10 h-6 rounded-full transition-all shrink-0"
+                      style={{ background: notif[item.key] ? "#22c55e" : "#1e3a5f" }}
+                    >
+                      <span
+                        className="absolute top-1 w-4 h-4 rounded-full transition-all"
+                        style={{
+                          background: "#fff",
+                          left: notif[item.key] ? "22px" : "2px",
+                        }}
+                      />
+                    </button>
+                  </div>
+                ))}
+                <div className="flex items-center gap-4 pt-2">
+                  <button
+                    onClick={() => save(setNotifSaved)}
+                    className="px-5 py-2.5 rounded-xl text-sm font-semibold transition-all hover:opacity-90"
+                    style={{ background: "linear-gradient(135deg, #22c55e, #16a34a)", color: "#fff" }}
+                  >
+                    Einstellungen speichern
+                  </button>
+                  <SaveFeedback visible={notifSaved} />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Sicherheit ── */}
+          {active === "sicherheit" && (
+            <div className="space-y-4">
+              <div className="rounded-xl p-6" style={{ background: "#112240", border: "1px solid #1e3a5f" }}>
+                <h2 className="text-base font-bold mb-5" style={{ color: "#e6edf3", fontFamily: "var(--font-syne)" }}>
+                  Passwort ändern
+                </h2>
+                <form onSubmit={handlePwSave} className="space-y-4">
+                  {[
+                    { label: "Aktuelles Passwort", key: "current" as const, placeholder: "••••••••" },
+                    { label: "Neues Passwort", key: "newPw" as const, placeholder: "Min. 8 Zeichen" },
+                    { label: "Passwort bestätigen", key: "confirm" as const, placeholder: "Wiederholen" },
+                  ].map((f) => (
+                    <div key={f.key}>
+                      <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>{f.label}</label>
+                      <input
+                        type="password"
+                        value={pw[f.key]}
+                        onChange={(e) => setPw({ ...pw, [f.key]: e.target.value })}
+                        placeholder={f.placeholder}
+                        className="w-full px-4 py-3 rounded-xl text-sm outline-none"
+                        style={inputStyle()}
+                        onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
+                        onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
+                      />
+                    </div>
+                  ))}
+                  {pwError && (
+                    <p className="text-xs" style={{ color: "#ef4444" }}>{pwError}</p>
+                  )}
+                  <div className="flex items-center gap-4 pt-1">
+                    <button
+                      type="submit"
+                      className="px-5 py-2.5 rounded-xl text-sm font-semibold transition-all hover:opacity-90"
+                      style={{ background: "linear-gradient(135deg, #8b9ab5, #6b7a9a)", color: "#0d1b2e" }}
+                    >
+                      Passwort ändern
+                    </button>
+                    <SaveFeedback visible={pwSaved} />
+                  </div>
+                </form>
+              </div>
+
+              <div className="rounded-xl p-5" style={{ background: "#112240", border: "1px solid #1e3a5f" }}>
+                <h3 className="text-sm font-semibold mb-3" style={{ color: "#e6edf3" }}>Zwei-Faktor-Authentifizierung</h3>
+                <p className="text-xs mb-4" style={{ color: "#8b9ab5" }}>
+                  Sichern Sie Ihr Konto mit einer zusätzlichen Verifikation beim Anmelden.
+                </p>
+                <div
+                  className="flex items-center justify-between p-4 rounded-xl"
+                  style={{ background: "#0d1b2e", border: "1px solid #1e3a5f" }}
+                >
+                  <div>
+                    <p className="text-sm font-medium" style={{ color: "#e6edf3" }}>Authenticator-App</p>
+                    <p className="text-xs mt-0.5" style={{ color: "#8b9ab5" }}>z.B. Google Authenticator, Authy</p>
+                  </div>
+                  <span
+                    className="text-xs px-2.5 py-1 rounded-full"
+                    style={{ background: "#1e3a5f", color: "#8b9ab5", border: "1px solid #2a4a6f" }}
+                  >
+                    Nicht aktiviert
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Abo ── */}
           {active === "abo" && (
             <div className="space-y-4">
-              {/* Current plan */}
-              <div
-                className="rounded-xl p-5"
-                style={{ background: "#112240", border: "1px solid #1e3a5f" }}
-              >
-                <h2
-                  className="text-base font-bold mb-4"
-                  style={{ color: "#e6edf3", fontFamily: "var(--font-syne)" }}
-                >
+              <div className="rounded-xl p-5" style={{ background: "#112240", border: "1px solid #1e3a5f" }}>
+                <h2 className="text-base font-bold mb-4" style={{ color: "#e6edf3", fontFamily: "var(--font-syne)" }}>
                   Aktueller Plan
                 </h2>
                 <div className="flex items-center justify-between">
@@ -150,36 +428,23 @@ export default function EinstellungenPage() {
                 </div>
               </div>
 
-              {/* Pro plan */}
               <div
                 className="rounded-xl p-5"
-                style={{
-                  background: "linear-gradient(135deg, #f5a62310, #112240)",
-                  border: "1px solid #f5a62344",
-                }}
+                style={{ background: "linear-gradient(135deg, #f5a62310, #112240)", border: "1px solid #f5a62344" }}
               >
                 <div className="flex items-start justify-between mb-4">
                   <div>
                     <div className="flex items-center gap-2 mb-1">
                       <Zap size={18} style={{ color: "#f5a623" }} />
-                      <span
-                        className="text-xl font-bold"
-                        style={{ color: "#e6edf3", fontFamily: "var(--font-syne)" }}
-                      >
+                      <span className="text-xl font-bold" style={{ color: "#e6edf3", fontFamily: "var(--font-syne)" }}>
                         Pro
                       </span>
                     </div>
-                    <p className="text-sm" style={{ color: "#8b9ab5" }}>
-                      Alles unlimitiert + alle Pro-Features
-                    </p>
+                    <p className="text-sm" style={{ color: "#8b9ab5" }}>Alles unlimitiert + alle Pro-Features</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-2xl font-bold" style={{ color: "#f5a623", fontFamily: "var(--font-syne)" }}>
-                      49 €
-                    </p>
-                    <p className="text-xs" style={{ color: "#8b9ab5" }}>
-                      /Monat
-                    </p>
+                    <p className="text-2xl font-bold" style={{ color: "#f5a623", fontFamily: "var(--font-syne)" }}>49 €</p>
+                    <p className="text-xs" style={{ color: "#8b9ab5" }}>/Monat</p>
                   </div>
                 </div>
 
@@ -203,10 +468,7 @@ export default function EinstellungenPage() {
 
                 <button
                   className="w-full py-3 rounded-xl text-sm font-semibold transition-all hover:opacity-90"
-                  style={{
-                    background: "linear-gradient(135deg, #f5a623, #c4841c)",
-                    color: "#0d1b2e",
-                  }}
+                  style={{ background: "linear-gradient(135deg, #f5a623, #c4841c)", color: "#0d1b2e" }}
                 >
                   Jetzt auf Pro upgraden
                 </button>
@@ -214,29 +476,6 @@ export default function EinstellungenPage() {
             </div>
           )}
 
-          {(active === "firma" || active === "benachrichtigungen" || active === "sicherheit") && (
-            <div
-              className="rounded-xl p-10 flex flex-col items-center justify-center text-center"
-              style={{
-                background: "#112240",
-                border: "1px solid #1e3a5f",
-                minHeight: "240px",
-              }}
-            >
-              <div
-                className="w-12 h-12 rounded-full flex items-center justify-center mb-3"
-                style={{ background: "#1e3a5f" }}
-              >
-                <Lock size={20} style={{ color: "#8b9ab5" }} />
-              </div>
-              <p className="text-sm font-medium mb-1" style={{ color: "#e6edf3" }}>
-                Kommt bald
-              </p>
-              <p className="text-xs" style={{ color: "#8b9ab5" }}>
-                Dieser Bereich wird in der nächsten Version verfügbar sein.
-              </p>
-            </div>
-          )}
         </div>
       </div>
     </DashboardLayout>
