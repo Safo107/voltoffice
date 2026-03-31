@@ -51,8 +51,8 @@ export default function DatenschutzPage() {
           </p>
           <p>
             E-Mail:{" "}
-            <a href="mailto:safin.d@elektrogenius.de" className="transition-opacity hover:opacity-70" style={{ color: "#00c6ff" }}>
-              safin.d@elektrogenius.de
+            <a href="mailto:info@elektrogenius.de" className="transition-opacity hover:opacity-70" style={{ color: "#00c6ff" }}>
+              info@elektrogenius.de
             </a>
           </p>
         </Section>
@@ -145,8 +145,8 @@ export default function DatenschutzPage() {
           </ul>
           <p>
             Zur Ausübung Ihrer Rechte wenden Sie sich bitte per E-Mail an:{" "}
-            <a href="mailto:safin.d@elektrogenius.de" className="transition-opacity hover:opacity-70" style={{ color: "#00c6ff" }}>
-              safin.d@elektrogenius.de
+            <a href="mailto:info@elektrogenius.de" className="transition-opacity hover:opacity-70" style={{ color: "#00c6ff" }}>
+              info@elektrogenius.de
             </a>
           </p>
           <p>
@@ -177,8 +177,8 @@ export default function DatenschutzPage() {
             Bei Fragen zum Datenschutz wenden Sie sich an:<br />
             <strong style={{ color: "#e6edf3" }}>Safin Deler Yezdin Al Ali</strong><br />
             E-Mail:{" "}
-            <a href="mailto:safin.d@elektrogenius.de" className="transition-opacity hover:opacity-70" style={{ color: "#00c6ff" }}>
-              safin.d@elektrogenius.de
+            <a href="mailto:info@elektrogenius.de" className="transition-opacity hover:opacity-70" style={{ color: "#00c6ff" }}>
+              info@elektrogenius.de
             </a>
           </p>
         </Section>

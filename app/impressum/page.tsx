@@ -45,7 +45,7 @@ export default function ImpressumPage() {
         <section className="mb-8">
           <h2 className="text-base font-semibold mb-3" style={{ color: "#00c6ff" }}>Kontakt</h2>
           <div className="rounded-xl p-5 text-sm leading-relaxed" style={{ background: "#112240", border: "1px solid #1e3a5f", color: "#c8dff0" }}>
-            <p>E-Mail: <a href="mailto:safin.d@elektrogenius.de" className="transition-opacity hover:opacity-70" style={{ color: "#00c6ff" }}>safin.d@elektrogenius.de</a></p>
+            <p>E-Mail: <a href="mailto:info@elektrogenius.de" className="transition-opacity hover:opacity-70" style={{ color: "#00c6ff" }}>info@elektrogenius.de</a></p>
           </div>
         </section>
 

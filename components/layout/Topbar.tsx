@@ -53,9 +53,9 @@ export default function Topbar({ title, subtitle }: TopbarProps) {
 
       {/* Right side */}
       <div className="flex items-center gap-3">
-        {/* Search */}
+        {/* Search — nur Desktop */}
         <div
-          className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all"
+          className="hidden md:flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all"
           style={{ background: "#0d1b2e", border: "1px solid #1e3a5f", color: "#8b9ab5", minWidth: "200px", cursor: "text" }}
         >
           <Search size={14} />
@@ -164,7 +164,7 @@ export default function Topbar({ title, subtitle }: TopbarProps) {
             >
               <User size={14} style={{ color: "#00c6ff" }} />
             </div>
-            <span className="text-sm font-medium" style={{ color: "#e6edf3" }}>Mein Betrieb</span>
+            <span className="hidden sm:inline text-sm font-medium" style={{ color: "#e6edf3" }}>Mein Betrieb</span>
             <ChevronDown
               size={14}
               style={{

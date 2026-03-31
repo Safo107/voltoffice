@@ -158,10 +158,10 @@ export default function AuthPage() {
       </div>
 
       {/* Right — Form */}
-      <div className="flex-1 flex items-center justify-center p-8">
+      <div className="flex-1 flex items-center justify-center px-4 py-8 sm:p-8">
         <div className="w-full max-w-sm">
           {/* Mobile Logo */}
-          <div className="flex items-center gap-3 mb-8 lg:hidden">
+          <div className="flex items-center gap-3 mb-6 lg:hidden">
             <div className="flex items-center justify-center w-10 h-10 rounded-xl" style={{ background: "linear-gradient(135deg, #00c6ff, #0099cc)" }}>
               <Zap size={20} style={{ color: "#0d1b2e" }} />
             </div>
@@ -172,7 +172,7 @@ export default function AuthPage() {
           </div>
 
           {/* Title */}
-          <h2 className="text-2xl font-bold mb-1" style={{ color: "#e6edf3", fontFamily: "var(--font-syne)" }}>
+          <h2 className="text-xl sm:text-2xl font-bold mb-1" style={{ color: "#e6edf3", fontFamily: "var(--font-syne)" }}>
             {mode === "login" ? "Anmelden" : mode === "register" ? "Konto erstellen" : "Passwort zurücksetzen"}
           </h2>
           <p className="text-sm mb-8" style={{ color: "#8b9ab5" }}>
