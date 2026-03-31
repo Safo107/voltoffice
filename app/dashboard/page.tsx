@@ -13,6 +13,11 @@ import {
   AlertCircle,
   ArrowRight,
 } from "lucide-react";
+import WorkdayProgressWidget from "@/components/widgets/WorkdayProgressWidget";
+import WeatherWidget from "@/components/widgets/WeatherWidget";
+import OpenInvoicesWidget from "@/components/widgets/OpenInvoicesWidget";
+import TodayOnSiteWidget from "@/components/widgets/TodayOnSiteWidget";
+import TimeTrackerWidget from "@/components/widgets/TimeTrackerWidget";
 
 const recentActivity = [
   {
@@ -106,6 +111,15 @@ export default function DashboardPage() {
           accent="muted"
           sublabel="3 Einträge"
         />
+      </div>
+
+      {/* Widgets Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mb-6">
+        <WorkdayProgressWidget />
+        <TimeTrackerWidget />
+        <TodayOnSiteWidget />
+        <WeatherWidget />
+        <OpenInvoicesWidget />
       </div>
 
       {/* Two column layout */}
