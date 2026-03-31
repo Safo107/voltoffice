@@ -1,0 +1,431 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import DashboardLayout from "@/components/layout/DashboardLayout";
+import Modal from "@/components/ui/Modal";
+import EmptyState from "@/components/ui/EmptyState";
+import {
+  Users,
+  Plus,
+  Search,
+  Phone,
+  Mail,
+  MapPin,
+  MoreVertical,
+  AlertCircle,
+  Trash2,
+  Edit,
+  Loader,
+} from "lucide-react";
+
+interface Customer {
+  _id?: string;
+  id?: string;
+  name: string;
+  email: string;
+  phone: string;
+  address: string;
+  city: string;
+  zip: string;
+  createdAt?: string;
+}
+
+const FREE_LIMIT = 5;
+const EMPTY_FORM: Omit<Customer, "_id" | "createdAt"> = {
+  name: "",
+  email: "",
+  phone: "",
+  address: "",
+  city: "",
+  zip: "",
+};
+
+export default function KundenPage() {
+  const [kunden, setKunden] = useState<Customer[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editKunde, setEditKunde] = useState<Customer | null>(null);
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [saving, setSaving] = useState(false);
+  const [menuOpen, setMenuOpen] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchKunden();
+  }, []);
+
+  const fetchKunden = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/kunden");
+      const data = await res.json();
+      setKunden(data);
+    } catch {
+      // Stille Fehler für Demo
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const openNew = () => {
+    setEditKunde(null);
+    setForm(EMPTY_FORM);
+    setModalOpen(true);
+  };
+
+  const openEdit = (kunde: Customer) => {
+    setEditKunde(kunde);
+    setForm({
+      name: kunde.name,
+      email: kunde.email,
+      phone: kunde.phone,
+      address: kunde.address,
+      city: kunde.city,
+      zip: kunde.zip,
+    });
+    setModalOpen(true);
+    setMenuOpen(null);
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      if (editKunde) {
+        const id = editKunde._id || editKunde.id;
+        await fetch(`/api/kunden/${id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(form),
+        });
+      } else {
+        await fetch("/api/kunden", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(form),
+        });
+      }
+      await fetchKunden();
+      setModalOpen(false);
+    } catch {
+      // Error handling
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (kunde: Customer) => {
+    if (!confirm(`Kunde "${kunde.name}" wirklich löschen?`)) return;
+    const id = kunde._id || kunde.id;
+    await fetch(`/api/kunden/${id}`, { method: "DELETE" });
+    await fetchKunden();
+    setMenuOpen(null);
+  };
+
+  const filtered = kunden.filter(
+    (c) =>
+      c.name.toLowerCase().includes(search.toLowerCase()) ||
+      c.email.toLowerCase().includes(search.toLowerCase())
+  );
+  const atLimit = kunden.length >= FREE_LIMIT;
+
+  return (
+    <DashboardLayout title="Kunden" subtitle={`${kunden.length} von ${FREE_LIMIT} Kunden (Free)`}>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm flex-1 max-w-xs"
+          style={{ background: "#112240", border: "1px solid #1e3a5f", color: "#8b9ab5" }}
+        >
+          <Search size={15} />
+          <input
+            type="text"
+            placeholder="Kunde suchen..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="flex-1 bg-transparent outline-none text-sm"
+            style={{ color: "#e6edf3" }}
+          />
+        </div>
+
+        <button
+          onClick={openNew}
+          disabled={atLimit}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ml-3 disabled:cursor-not-allowed"
+          style={{
+            background: atLimit
+              ? "#1e3a5f"
+              : "linear-gradient(135deg, #00c6ff, #0099cc)",
+            color: atLimit ? "#4a5568" : "#0d1b2e",
+          }}
+          title={atLimit ? "Free-Limit: max. 5 Kunden" : undefined}
+        >
+          <Plus size={16} />
+          Neuer Kunde
+        </button>
+      </div>
+
+      {atLimit && (
+        <div
+          className="flex items-start gap-3 p-4 rounded-xl mb-4"
+          style={{ background: "#f5a62310", border: "1px solid #f5a62333" }}
+        >
+          <AlertCircle size={16} style={{ color: "#f5a623", marginTop: 1 }} />
+          <p className="text-sm" style={{ color: "#e6edf3" }}>
+            <span style={{ color: "#f5a623", fontWeight: 600 }}>Free-Limit erreicht.</span>{" "}
+            Upgraden Sie auf Pro für unbegrenzte Kunden.
+          </p>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex items-center justify-center py-20">
+          <Loader size={24} className="animate-spin" style={{ color: "#00c6ff" }} />
+        </div>
+      ) : filtered.length === 0 ? (
+        <EmptyState
+          icon={<Users size={32} />}
+          title="Noch keine Kunden"
+          description="Legen Sie Ihren ersten Kunden an."
+          action={
+            <button
+              onClick={openNew}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold"
+              style={{ background: "linear-gradient(135deg, #00c6ff, #0099cc)", color: "#0d1b2e" }}
+            >
+              <Plus size={15} />
+              Ersten Kunden anlegen
+            </button>
+          }
+        />
+      ) : (
+        <div
+          className="rounded-xl overflow-hidden"
+          style={{ border: "1px solid #1e3a5f" }}
+        >
+          <div
+            className="grid grid-cols-12 px-4 py-3 text-xs font-semibold uppercase tracking-wider"
+            style={{ background: "#112240", color: "#8b9ab5", borderBottom: "1px solid #1e3a5f" }}
+          >
+            <div className="col-span-4">Name / Firma</div>
+            <div className="col-span-3">Kontakt</div>
+            <div className="col-span-3">Ort</div>
+            <div className="col-span-1">Seit</div>
+            <div className="col-span-1" />
+          </div>
+
+          {filtered.map((kunde, i) => {
+            const id = kunde._id || kunde.id || String(i);
+            return (
+              <div
+                key={id}
+                className="grid grid-cols-12 px-4 py-4 items-center transition-all"
+                style={{
+                  background: i % 2 === 0 ? "#0d1b2e" : "#112240",
+                  borderBottom: i < filtered.length - 1 ? "1px solid #1e3a5f44" : "none",
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = "#00c6ff08"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = i % 2 === 0 ? "#0d1b2e" : "#112240"; }}
+              >
+                <div className="col-span-4 flex items-center gap-3">
+                  <div
+                    className="flex items-center justify-center w-9 h-9 rounded-lg shrink-0 text-sm font-bold"
+                    style={{ background: "#00c6ff18", color: "#00c6ff", border: "1px solid #00c6ff33" }}
+                  >
+                    {kunde.name.charAt(0).toUpperCase()}
+                  </div>
+                  <p className="text-sm font-medium" style={{ color: "#e6edf3" }}>{kunde.name}</p>
+                </div>
+
+                <div className="col-span-3">
+                  <div className="flex items-center gap-1.5 text-xs mb-1" style={{ color: "#8b9ab5" }}>
+                    <Mail size={11} />{kunde.email}
+                  </div>
+                  <div className="flex items-center gap-1.5 text-xs" style={{ color: "#8b9ab5" }}>
+                    <Phone size={11} />{kunde.phone}
+                  </div>
+                </div>
+
+                <div className="col-span-3">
+                  <div className="flex items-center gap-1.5 text-xs" style={{ color: "#8b9ab5" }}>
+                    <MapPin size={11} />{kunde.zip} {kunde.city}
+                  </div>
+                </div>
+
+                <div className="col-span-1">
+                  <p className="text-xs" style={{ color: "#4a5568" }}>
+                    {kunde.createdAt
+                      ? new Date(kunde.createdAt).toLocaleDateString("de-DE", { month: "short", year: "2-digit" })
+                      : "—"}
+                  </p>
+                </div>
+
+                <div className="col-span-1 flex justify-end relative">
+                  <button
+                    onClick={() => setMenuOpen(menuOpen === id ? null : id)}
+                    className="p-1.5 rounded-lg transition-all"
+                    style={{ color: "#8b9ab5" }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = "#1e3a5f"; e.currentTarget.style.color = "#e6edf3"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#8b9ab5"; }}
+                  >
+                    <MoreVertical size={15} />
+                  </button>
+                  {menuOpen === id && (
+                    <div
+                      className="absolute right-0 top-8 rounded-xl py-1 z-20 min-w-32"
+                      style={{ background: "#1a2f50", border: "1px solid #1e3a5f", boxShadow: "0 8px 24px rgba(0,0,0,0.4)" }}
+                    >
+                      <button
+                        onClick={() => openEdit(kunde)}
+                        className="flex items-center gap-2 w-full px-4 py-2 text-sm transition-all"
+                        style={{ color: "#e6edf3" }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = "#1e3a5f"; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+                      >
+                        <Edit size={13} /> Bearbeiten
+                      </button>
+                      <button
+                        onClick={() => handleDelete(kunde)}
+                        className="flex items-center gap-2 w-full px-4 py-2 text-sm transition-all"
+                        style={{ color: "#ef4444" }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = "#ef444418"; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+                      >
+                        <Trash2 size={13} /> Löschen
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Progress bar */}
+      <div className="mt-4 flex items-center gap-3">
+        <div className="flex-1 h-1.5 rounded-full" style={{ background: "#1e3a5f" }}>
+          <div
+            className="h-1.5 rounded-full transition-all"
+            style={{
+              width: `${Math.min((kunden.length / FREE_LIMIT) * 100, 100)}%`,
+              background: kunden.length >= FREE_LIMIT ? "#f5a623" : "#00c6ff",
+            }}
+          />
+        </div>
+        <span className="text-xs" style={{ color: "#8b9ab5" }}>
+          {kunden.length}/{FREE_LIMIT} Kunden (Free)
+        </span>
+      </div>
+
+      {/* Modal */}
+      <Modal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title={editKunde ? "Kunde bearbeiten" : "Neuen Kunden anlegen"}
+      >
+        <form onSubmit={handleSave} className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>
+                Firmenname / Name *
+              </label>
+              <input
+                required
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                placeholder="Musterbetrieb GmbH"
+                className="w-full px-4 py-2.5 rounded-xl text-sm outline-none"
+                style={{ background: "#0d1b2e", border: "1px solid #1e3a5f", color: "#e6edf3" }}
+                onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>E-Mail</label>
+              <input
+                type="email"
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                placeholder="kontakt@firma.de"
+                className="w-full px-4 py-2.5 rounded-xl text-sm outline-none"
+                style={{ background: "#0d1b2e", border: "1px solid #1e3a5f", color: "#e6edf3" }}
+                onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Telefon</label>
+              <input
+                value={form.phone}
+                onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                placeholder="030 12345678"
+                className="w-full px-4 py-2.5 rounded-xl text-sm outline-none"
+                style={{ background: "#0d1b2e", border: "1px solid #1e3a5f", color: "#e6edf3" }}
+                onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
+              />
+            </div>
+            <div className="col-span-2">
+              <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Straße & Hausnummer</label>
+              <input
+                value={form.address}
+                onChange={(e) => setForm({ ...form, address: e.target.value })}
+                placeholder="Musterstraße 1"
+                className="w-full px-4 py-2.5 rounded-xl text-sm outline-none"
+                style={{ background: "#0d1b2e", border: "1px solid #1e3a5f", color: "#e6edf3" }}
+                onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>PLZ</label>
+              <input
+                value={form.zip}
+                onChange={(e) => setForm({ ...form, zip: e.target.value })}
+                placeholder="10115"
+                className="w-full px-4 py-2.5 rounded-xl text-sm outline-none"
+                style={{ background: "#0d1b2e", border: "1px solid #1e3a5f", color: "#e6edf3" }}
+                onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Stadt</label>
+              <input
+                value={form.city}
+                onChange={(e) => setForm({ ...form, city: e.target.value })}
+                placeholder="Berlin"
+                className="w-full px-4 py-2.5 rounded-xl text-sm outline-none"
+                style={{ background: "#0d1b2e", border: "1px solid #1e3a5f", color: "#e6edf3" }}
+                onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
+              />
+            </div>
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => setModalOpen(false)}
+              className="flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all"
+              style={{ background: "#0d1b2e", border: "1px solid #1e3a5f", color: "#8b9ab5" }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#8b9ab5"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
+            >
+              Abbrechen
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all disabled:opacity-50"
+              style={{ background: "linear-gradient(135deg, #00c6ff, #0099cc)", color: "#0d1b2e" }}
+            >
+              {saving ? "Wird gespeichert..." : editKunde ? "Aktualisieren" : "Anlegen"}
+            </button>
+          </div>
+        </form>
+      </Modal>
+    </DashboardLayout>
+  );
+}
