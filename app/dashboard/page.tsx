@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import StatCard from "@/components/dashboard/StatCard";
 import {
@@ -7,9 +8,7 @@ import {
   FileText,
   Briefcase,
   Clock,
-  TrendingUp,
   AlertCircle,
-  CheckCircle,
   ArrowRight,
 } from "lucide-react";
 
@@ -62,6 +61,7 @@ const openOffers = [
 ];
 
 export default function DashboardPage() {
+  const router = useRouter();
   return (
     <DashboardLayout
       title="Dashboard"
@@ -276,13 +276,14 @@ export default function DashboardPage() {
             </h2>
             <div className="grid grid-cols-2 gap-2">
               {[
-                { label: "Angebot erstellen", icon: <FileText size={14} />, color: "#00c6ff" },
-                { label: "Kunde anlegen", icon: <Users size={14} />, color: "#f5a623" },
-                { label: "Zeit erfassen", icon: <Clock size={14} />, color: "#22c55e" },
-                { label: "Projekt erstellen", icon: <Briefcase size={14} />, color: "#8b9ab5" },
+                { label: "Angebot erstellen", icon: <FileText size={14} />, color: "#00c6ff", href: "/angebote" },
+                { label: "Kunde anlegen", icon: <Users size={14} />, color: "#f5a623", href: "/kunden" },
+                { label: "Zeit erfassen", icon: <Clock size={14} />, color: "#22c55e", href: "/zeiterfassung" },
+                { label: "Projekt erstellen", icon: <Briefcase size={14} />, color: "#8b9ab5", href: "/projekte" },
               ].map((action) => (
                 <button
                   key={action.label}
+                  onClick={() => router.push(action.href)}
                   className="flex items-center gap-2 p-3 rounded-lg text-xs font-medium text-left transition-all"
                   style={{
                     background: "#0d1b2e",

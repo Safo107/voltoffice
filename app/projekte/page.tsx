@@ -1,21 +1,19 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
-import { Briefcase, Plus, Search, MoreVertical, Calendar, User } from "lucide-react";
-import { useState } from "react";
-import type { Project } from "@/types";
+import Modal from "@/components/ui/Modal";
+import EmptyState from "@/components/ui/EmptyState";
+import { Briefcase, Plus, Search, MoreVertical, Calendar, User, Loader, AlertCircle, Trash2, Edit } from "lucide-react";
 
-const mockProjects: Project[] = [
-  {
-    id: "1",
-    title: "Wohnanlage Bergstraße",
-    customerId: "1",
-    customerName: "Schulz GmbH",
-    status: "active",
-    startDate: "2024-11-01",
-    description: "Elektroinstallation Neubau, 12 Einheiten",
-  },
-];
+interface Project {
+  _id?: string;
+  title: string;
+  customerName: string;
+  status: "active" | "paused" | "completed";
+  startDate: string;
+  description: string;
+}
 
 const statusConfig = {
   active: { label: "Aktiv", color: "#22c55e" },
@@ -25,163 +23,264 @@ const statusConfig = {
 
 const FREE_LIMIT = 3;
 
-export default function ProjektePage() {
-  const [search, setSearch] = useState("");
+const EMPTY_FORM = { title: "", customerName: "", status: "active" as const, startDate: "", description: "" };
 
-  const filtered = mockProjects.filter(
-    (p) =>
-      p.title.toLowerCase().includes(search.toLowerCase()) ||
-      p.customerName.toLowerCase().includes(search.toLowerCase())
+export default function ProjektePage() {
+  const [projekte, setProjekte] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editProjekt, setEditProjekt] = useState<Project | null>(null);
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [saving, setSaving] = useState(false);
+  const [menuOpen, setMenuOpen] = useState<string | null>(null);
+
+  useEffect(() => { fetchProjekte(); }, []);
+
+  const fetchProjekte = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/projekte");
+      const data = await res.json();
+      setProjekte(Array.isArray(data) ? data : []);
+    } catch {
+      setProjekte([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const openNew = () => {
+    setEditProjekt(null);
+    setForm({ ...EMPTY_FORM, startDate: new Date().toISOString().split("T")[0] });
+    setModalOpen(true);
+  };
+
+  const openEdit = (p: Project) => {
+    setEditProjekt(p);
+    setForm({ title: p.title, customerName: p.customerName, status: p.status, startDate: p.startDate, description: p.description });
+    setModalOpen(true);
+    setMenuOpen(null);
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      if (editProjekt) {
+        await fetch(`/api/projekte/${editProjekt._id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(form),
+        });
+      } else {
+        await fetch("/api/projekte", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(form),
+        });
+      }
+      await fetchProjekte();
+      setModalOpen(false);
+    } catch {
+      //
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (p: Project) => {
+    if (!confirm(`Projekt "${p.title}" wirklich löschen?`)) return;
+    await fetch(`/api/projekte/${p._id}`, { method: "DELETE" });
+    await fetchProjekte();
+    setMenuOpen(null);
+  };
+
+  const filtered = projekte.filter(
+    (p) => p.title.toLowerCase().includes(search.toLowerCase()) || p.customerName.toLowerCase().includes(search.toLowerCase())
   );
+  const atLimit = projekte.length >= FREE_LIMIT;
 
   return (
-    <DashboardLayout title="Projekte" subtitle={`${mockProjects.length} von ${FREE_LIMIT} Projekten (Free)`}>
+    <DashboardLayout title="Projekte" subtitle={`${projekte.length} von ${FREE_LIMIT} Projekten (Free)`}>
       <div className="flex items-center justify-between mb-6">
-        <div
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm"
-          style={{
-            background: "#112240",
-            border: "1px solid #1e3a5f",
-            color: "#8b9ab5",
-            flex: 1,
-            maxWidth: "320px",
-          }}
-        >
+        <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm flex-1 max-w-xs"
+          style={{ background: "#112240", border: "1px solid #1e3a5f", color: "#8b9ab5" }}>
           <Search size={15} />
-          <input
-            type="text"
-            placeholder="Projekt suchen..."
-            value={search}
+          <input type="text" placeholder="Projekt suchen..." value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="flex-1 bg-transparent outline-none text-sm"
-            style={{ color: "#e6edf3" }}
-          />
+            className="flex-1 bg-transparent outline-none text-sm" style={{ color: "#e6edf3" }} />
         </div>
-
-        <button
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ml-3"
-          style={{
-            background: "linear-gradient(135deg, #00c6ff, #0099cc)",
-            color: "#0d1b2e",
-          }}
-        >
-          <Plus size={16} />
-          Neues Projekt
+        <button onClick={openNew} disabled={atLimit}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ml-3 disabled:cursor-not-allowed"
+          style={{ background: atLimit ? "#1e3a5f" : "linear-gradient(135deg, #00c6ff, #0099cc)", color: atLimit ? "#4a5568" : "#0d1b2e" }}>
+          <Plus size={16} /> Neues Projekt
         </button>
       </div>
 
-      {/* Project cards */}
-      {filtered.length === 0 ? (
-        <div
-          className="py-20 text-center rounded-xl"
-          style={{ background: "#112240", border: "1px solid #1e3a5f" }}
-        >
-          <Briefcase size={40} className="mx-auto mb-3" style={{ color: "#1e3a5f" }} />
-          <p className="text-sm" style={{ color: "#8b9ab5" }}>
-            Keine Projekte gefunden.
+      {atLimit && (
+        <div className="flex items-start gap-3 p-4 rounded-xl mb-4"
+          style={{ background: "#f5a62310", border: "1px solid #f5a62333" }}>
+          <AlertCircle size={16} style={{ color: "#f5a623", marginTop: 1 }} />
+          <p className="text-sm" style={{ color: "#e6edf3" }}>
+            <span style={{ color: "#f5a623", fontWeight: 600 }}>Free-Limit erreicht.</span>{" "}
+            Max. {FREE_LIMIT} Projekte. Upgrade für unbegrenzte Projekte.
           </p>
         </div>
+      )}
+
+      {loading ? (
+        <div className="flex items-center justify-center py-20">
+          <Loader size={24} className="animate-spin" style={{ color: "#00c6ff" }} />
+        </div>
+      ) : filtered.length === 0 ? (
+        <EmptyState icon={<Briefcase size={32} />} title="Noch keine Projekte"
+          description="Legen Sie Ihr erstes Projekt an."
+          action={!atLimit ? (
+            <button onClick={openNew}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold"
+              style={{ background: "linear-gradient(135deg, #00c6ff, #0099cc)", color: "#0d1b2e" }}>
+              <Plus size={15} /> Erstes Projekt anlegen
+            </button>
+          ) : undefined} />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filtered.map((project) => {
-            const sc = statusConfig[project.status];
+            const id = project._id || project.title;
+            const sc = statusConfig[project.status] || statusConfig.active;
             return (
-              <div
-                key={project.id}
-                className="rounded-xl p-5 cursor-pointer transition-all hover:scale-[1.01]"
-                style={{
-                  background: "#112240",
-                  border: "1px solid #1e3a5f",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = "#00c6ff33";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = "#1e3a5f";
-                }}
-              >
+              <div key={id} className="rounded-xl p-5 transition-all"
+                style={{ background: "#112240", border: "1px solid #1e3a5f" }}
+                onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#00c6ff33"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}>
                 <div className="flex items-start justify-between mb-3">
-                  <div
-                    className="flex items-center justify-center w-10 h-10 rounded-lg"
-                    style={{ background: "#22c55e18", border: "1px solid #22c55e33" }}
-                  >
+                  <div className="flex items-center justify-center w-10 h-10 rounded-lg"
+                    style={{ background: "#22c55e18", border: "1px solid #22c55e33" }}>
                     <Briefcase size={18} style={{ color: "#22c55e" }} />
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="text-xs px-2 py-0.5 rounded-full"
-                      style={{
-                        background: `${sc.color}22`,
-                        color: sc.color,
-                        border: `1px solid ${sc.color}44`,
-                      }}
-                    >
+                  <div className="flex items-center gap-2 relative">
+                    <span className="text-xs px-2 py-0.5 rounded-full"
+                      style={{ background: `${sc.color}22`, color: sc.color, border: `1px solid ${sc.color}44` }}>
                       {sc.label}
                     </span>
-                    <button
-                      className="p-1 rounded transition-all"
-                      style={{ color: "#8b9ab5" }}
+                    <button className="p-1 rounded transition-all" style={{ color: "#8b9ab5" }}
+                      onClick={() => setMenuOpen(menuOpen === id ? null : id)}
                       onMouseEnter={(e) => { e.currentTarget.style.color = "#e6edf3"; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.color = "#8b9ab5"; }}
-                    >
+                      onMouseLeave={(e) => { e.currentTarget.style.color = "#8b9ab5"; }}>
                       <MoreVertical size={14} />
                     </button>
+                    {menuOpen === id && (
+                      <div className="absolute right-0 top-8 rounded-xl py-1 z-20 min-w-32"
+                        style={{ background: "#1a2f50", border: "1px solid #1e3a5f", boxShadow: "0 8px 24px rgba(0,0,0,0.4)" }}>
+                        <button onClick={() => openEdit(project)}
+                          className="flex items-center gap-2 w-full px-4 py-2 text-sm transition-all" style={{ color: "#e6edf3" }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = "#1e3a5f"; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
+                          <Edit size={13} /> Bearbeiten
+                        </button>
+                        <button onClick={() => handleDelete(project)}
+                          className="flex items-center gap-2 w-full px-4 py-2 text-sm transition-all" style={{ color: "#ef4444" }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = "#ef444418"; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
+                          <Trash2 size={13} /> Löschen
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
-
-                <h3
-                  className="text-base font-bold mb-1"
-                  style={{ color: "#e6edf3", fontFamily: "var(--font-syne)" }}
-                >
+                <h3 className="text-base font-bold mb-1" style={{ color: "#e6edf3", fontFamily: "var(--font-syne)" }}>
                   {project.title}
                 </h3>
-                <p className="text-xs mb-3" style={{ color: "#8b9ab5" }}>
-                  {project.description}
-                </p>
-
+                <p className="text-xs mb-3" style={{ color: "#8b9ab5" }}>{project.description}</p>
                 <div className="flex items-center justify-between pt-3" style={{ borderTop: "1px solid #1e3a5f" }}>
                   <div className="flex items-center gap-1.5 text-xs" style={{ color: "#8b9ab5" }}>
-                    <User size={11} />
-                    {project.customerName}
+                    <User size={11} />{project.customerName}
                   </div>
                   <div className="flex items-center gap-1.5 text-xs" style={{ color: "#8b9ab5" }}>
                     <Calendar size={11} />
-                    {new Date(project.startDate).toLocaleDateString("de-DE", {
-                      day: "2-digit",
-                      month: "short",
-                    })}
+                    {project.startDate ? new Date(project.startDate).toLocaleDateString("de-DE", { day: "2-digit", month: "short" }) : "—"}
                   </div>
                 </div>
               </div>
             );
           })}
 
-          {/* Empty slots */}
-          {Array.from({ length: FREE_LIMIT - mockProjects.length }).map((_, i) => (
-            <div
-              key={`empty-${i}`}
+          {!atLimit && (
+            <div onClick={openNew}
               className="rounded-xl p-5 flex flex-col items-center justify-center cursor-pointer transition-all"
-              style={{
-                background: "transparent",
-                border: "2px dashed #1e3a5f",
-                minHeight: "160px",
-                color: "#8b9ab5",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = "#00c6ff44";
-                e.currentTarget.style.background = "#00c6ff08";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = "#1e3a5f";
-                e.currentTarget.style.background = "transparent";
-              }}
-            >
+              style={{ background: "transparent", border: "2px dashed #1e3a5f", minHeight: "160px", color: "#8b9ab5" }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#00c6ff44"; e.currentTarget.style.background = "#00c6ff08"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; e.currentTarget.style.background = "transparent"; }}>
               <Plus size={22} className="mb-2" style={{ color: "#1e3a5f" }} />
               <p className="text-xs">Projekt hinzufügen</p>
             </div>
-          ))}
+          )}
         </div>
       )}
+
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editProjekt ? "Projekt bearbeiten" : "Neues Projekt"}>
+        <form onSubmit={handleSave} className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Projekttitel *</label>
+            <input required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })}
+              placeholder="z.B. Wohnanlage Bergstraße"
+              className="w-full px-4 py-2.5 rounded-xl text-sm outline-none"
+              style={{ background: "#0d1b2e", border: "1px solid #1e3a5f", color: "#e6edf3" }}
+              onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Kunde</label>
+            <input value={form.customerName} onChange={(e) => setForm({ ...form, customerName: e.target.value })}
+              placeholder="z.B. Schulz GmbH"
+              className="w-full px-4 py-2.5 rounded-xl text-sm outline-none"
+              style={{ background: "#0d1b2e", border: "1px solid #1e3a5f", color: "#e6edf3" }}
+              onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Status</label>
+              <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as Project["status"] })}
+                className="w-full px-4 py-2.5 rounded-xl text-sm outline-none"
+                style={{ background: "#0d1b2e", border: "1px solid #1e3a5f", color: "#e6edf3" }}>
+                <option value="active">Aktiv</option>
+                <option value="paused">Pausiert</option>
+                <option value="completed">Abgeschlossen</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Startdatum</label>
+              <input type="date" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })}
+                className="w-full px-4 py-2.5 rounded-xl text-sm outline-none"
+                style={{ background: "#0d1b2e", border: "1px solid #1e3a5f", color: "#e6edf3" }}
+                onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }} />
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Beschreibung</label>
+            <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}
+              placeholder="z.B. Elektroinstallation Neubau, 12 Einheiten" rows={3}
+              className="w-full px-4 py-2.5 rounded-xl text-sm outline-none resize-none"
+              style={{ background: "#0d1b2e", border: "1px solid #1e3a5f", color: "#e6edf3" }}
+              onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }} />
+          </div>
+          <div className="flex gap-3 pt-2">
+            <button type="button" onClick={() => setModalOpen(false)}
+              className="flex-1 py-2.5 rounded-xl text-sm font-semibold"
+              style={{ background: "#0d1b2e", border: "1px solid #1e3a5f", color: "#8b9ab5" }}>
+              Abbrechen
+            </button>
+            <button type="submit" disabled={saving}
+              className="flex-1 py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50"
+              style={{ background: "linear-gradient(135deg, #00c6ff, #0099cc)", color: "#0d1b2e" }}>
+              {saving ? "Wird gespeichert..." : editProjekt ? "Aktualisieren" : "Anlegen"}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </DashboardLayout>
   );
 }

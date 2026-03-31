@@ -5,15 +5,7 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 import Modal from "@/components/ui/Modal";
 import EmptyState from "@/components/ui/EmptyState";
 import {
-  FileText,
-  Plus,
-  Search,
-  MoreVertical,
-  AlertCircle,
-  Trash2,
-  Edit,
-  Loader,
-  Send,
+  FileText, Plus, Search, MoreVertical, AlertCircle, Trash2, Edit, Loader, Send,
 } from "lucide-react";
 
 interface OfferItem {
@@ -51,6 +43,7 @@ export default function AngebotePage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
+  const [editAngebot, setEditAngebot] = useState<Offer | null>(null);
   const [saving, setSaving] = useState(false);
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
   const [customerName, setCustomerName] = useState("");
@@ -64,19 +57,40 @@ export default function AngebotePage() {
     try {
       const res = await fetch("/api/angebote");
       const data = await res.json();
-      setAngebote(data);
+      setAngebote(Array.isArray(data) ? data : []);
     } catch {
-      //
+      setAngebote([]);
     } finally {
       setLoading(false);
     }
   };
 
   const openNew = () => {
+    setEditAngebot(null);
     setCustomerName("");
     setValidUntil("");
     setItems([{ ...EMPTY_ITEM }]);
     setModalOpen(true);
+  };
+
+  const openEdit = (a: Offer) => {
+    setEditAngebot(a);
+    setCustomerName(a.customerName);
+    setValidUntil(a.validUntil || "");
+    setItems(a.items?.length ? a.items : [{ ...EMPTY_ITEM }]);
+    setModalOpen(true);
+    setMenuOpen(null);
+  };
+
+  const handleSend = async (a: Offer) => {
+    if (a.status === "sent") return;
+    await fetch(`/api/angebote/${a._id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "sent" }),
+    });
+    await fetchAngebote();
+    setMenuOpen(null);
   };
 
   const updateItem = (i: number, field: keyof OfferItem, value: string | number) => {
@@ -92,11 +106,19 @@ export default function AngebotePage() {
     e.preventDefault();
     setSaving(true);
     try {
-      await fetch("/api/angebote", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ customerName, validUntil, items, total }),
-      });
+      if (editAngebot) {
+        await fetch(`/api/angebote/${editAngebot._id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ customerName, validUntil, items, total }),
+        });
+      } else {
+        await fetch("/api/angebote", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ customerName, validUntil, items, total }),
+        });
+      }
       await fetchAngebote();
       setModalOpen(false);
     } catch {
@@ -153,10 +175,7 @@ export default function AngebotePage() {
       </div>
 
       {atLimit && (
-        <div
-          className="flex items-start gap-3 p-4 rounded-xl mb-4"
-          style={{ background: "#f5a62310", border: "1px solid #f5a62333" }}
-        >
+        <div className="flex items-start gap-3 p-4 rounded-xl mb-4" style={{ background: "#f5a62310", border: "1px solid #f5a62333" }}>
           <AlertCircle size={16} style={{ color: "#f5a623", marginTop: 1 }} />
           <p className="text-sm" style={{ color: "#e6edf3" }}>
             <span style={{ color: "#f5a623", fontWeight: 600 }}>Free-Limit erreicht.</span>{" "}
@@ -216,18 +235,13 @@ export default function AngebotePage() {
                 onMouseLeave={(e) => { e.currentTarget.style.background = i % 2 === 0 ? "#0d1b2e" : "#112240"; }}
               >
                 <div className="col-span-2">
-                  <p className="text-sm font-mono font-medium" style={{ color: "#00c6ff" }}>
-                    #{angebot.number}
-                  </p>
+                  <p className="text-sm font-mono font-medium" style={{ color: "#00c6ff" }}>#{angebot.number}</p>
                 </div>
                 <div className="col-span-3">
                   <p className="text-sm font-medium" style={{ color: "#e6edf3" }}>{angebot.customerName}</p>
                 </div>
                 <div className="col-span-2">
-                  <span
-                    className="text-xs px-2 py-1 rounded-full"
-                    style={{ background: `${sc.color}22`, color: sc.color, border: `1px solid ${sc.color}44` }}
-                  >
+                  <span className="text-xs px-2 py-1 rounded-full" style={{ background: `${sc.color}22`, color: sc.color, border: `1px solid ${sc.color}44` }}>
                     {sc.label}
                   </span>
                 </div>
@@ -252,19 +266,20 @@ export default function AngebotePage() {
                     <MoreVertical size={15} />
                   </button>
                   {menuOpen === id && (
-                    <div
-                      className="absolute right-0 top-8 rounded-xl py-1 z-20 min-w-36"
-                      style={{ background: "#1a2f50", border: "1px solid #1e3a5f", boxShadow: "0 8px 24px rgba(0,0,0,0.4)" }}
-                    >
+                    <div className="absolute right-0 top-8 rounded-xl py-1 z-20 min-w-36"
+                      style={{ background: "#1a2f50", border: "1px solid #1e3a5f", boxShadow: "0 8px 24px rgba(0,0,0,0.4)" }}>
                       <button
+                        onClick={() => handleSend(angebot)}
                         className="flex items-center gap-2 w-full px-4 py-2 text-sm transition-all"
-                        style={{ color: "#e6edf3" }}
-                        onMouseEnter={(e) => { e.currentTarget.style.background = "#1e3a5f"; }}
+                        style={{ color: angebot.status === "sent" ? "#8b9ab5" : "#e6edf3" }}
+                        disabled={angebot.status === "sent"}
+                        onMouseEnter={(e) => { if (angebot.status !== "sent") e.currentTarget.style.background = "#1e3a5f"; }}
                         onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
                       >
-                        <Send size={13} /> Versenden
+                        <Send size={13} /> {angebot.status === "sent" ? "Bereits versendet" : "Als versendet markieren"}
                       </button>
                       <button
+                        onClick={() => openEdit(angebot)}
                         className="flex items-center gap-2 w-full px-4 py-2 text-sm transition-all"
                         style={{ color: "#e6edf3" }}
                         onMouseEnter={(e) => { e.currentTarget.style.background = "#1e3a5f"; }}
@@ -290,8 +305,7 @@ export default function AngebotePage() {
         </div>
       )}
 
-      {/* Modal */}
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Neues Angebot erstellen" maxWidth="600px">
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editAngebot ? "Angebot bearbeiten" : "Neues Angebot erstellen"} maxWidth="600px">
         <form onSubmit={handleSave} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -367,10 +381,7 @@ export default function AngebotePage() {
             </div>
           </div>
 
-          <div
-            className="flex items-center justify-between px-4 py-3 rounded-xl"
-            style={{ background: "#0d1b2e", border: "1px solid #00c6ff33" }}
-          >
+          <div className="flex items-center justify-between px-4 py-3 rounded-xl" style={{ background: "#0d1b2e", border: "1px solid #00c6ff33" }}>
             <span className="text-sm font-semibold" style={{ color: "#8b9ab5" }}>Gesamtbetrag</span>
             <span className="text-lg font-bold" style={{ color: "#00c6ff", fontFamily: "var(--font-syne)" }}>
               {total.toLocaleString("de-DE", { minimumFractionDigits: 2 })} €
@@ -392,7 +403,7 @@ export default function AngebotePage() {
               className="flex-1 py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50"
               style={{ background: "linear-gradient(135deg, #00c6ff, #0099cc)", color: "#0d1b2e" }}
             >
-              {saving ? "Wird erstellt..." : "Angebot erstellen"}
+              {saving ? "Wird gespeichert..." : editAngebot ? "Aktualisieren" : "Angebot erstellen"}
             </button>
           </div>
         </form>
