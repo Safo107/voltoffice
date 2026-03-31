@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
+import { ProProvider } from "@/context/ProContext";
 
 export const metadata: Metadata = {
   title: "VoltOffice — ElektroGenius",
@@ -23,7 +24,9 @@ export default function RootLayout({
         />
       </head>
       <body className="h-full">
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          <ProProvider>{children}</ProProvider>
+        </AuthProvider>
       </body>
     </html>
   );
