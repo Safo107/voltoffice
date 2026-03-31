@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Modal from "@/components/ui/Modal";
 import EmptyState from "@/components/ui/EmptyState";
+import { usePro } from "@/context/ProContext";
 import { Briefcase, Plus, Search, MoreVertical, Calendar, User, Loader, AlertCircle, Trash2, Edit } from "lucide-react";
 
 interface Project {
@@ -26,6 +28,8 @@ const FREE_LIMIT = 3;
 const EMPTY_FORM = { title: "", customerName: "", status: "active" as const, startDate: "", description: "" };
 
 export default function ProjektePage() {
+  const { isPro } = usePro();
+  const router = useRouter();
   const [projekte, setProjekte] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -99,10 +103,13 @@ export default function ProjektePage() {
   const filtered = projekte.filter(
     (p) => p.title.toLowerCase().includes(search.toLowerCase()) || p.customerName.toLowerCase().includes(search.toLowerCase())
   );
-  const atLimit = projekte.length >= FREE_LIMIT;
+  const atLimit = !isPro && projekte.length >= FREE_LIMIT;
 
   return (
-    <DashboardLayout title="Projekte" subtitle={`${projekte.length} von ${FREE_LIMIT} Projekten (Free)`}>
+    <DashboardLayout
+      title="Projekte"
+      subtitle={isPro ? `${projekte.length} Projekte` : `${projekte.length} von ${FREE_LIMIT} Projekten (Free)`}
+    >
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm flex-1 max-w-xs"
           style={{ background: "#112240", border: "1px solid #1e3a5f", color: "#8b9ab5" }}>
@@ -119,13 +126,22 @@ export default function ProjektePage() {
       </div>
 
       {atLimit && (
-        <div className="flex items-start gap-3 p-4 rounded-xl mb-4"
+        <div className="flex items-center justify-between gap-3 p-4 rounded-xl mb-4"
           style={{ background: "#f5a62310", border: "1px solid #f5a62333" }}>
-          <AlertCircle size={16} style={{ color: "#f5a623", marginTop: 1 }} />
-          <p className="text-sm" style={{ color: "#e6edf3" }}>
-            <span style={{ color: "#f5a623", fontWeight: 600 }}>Free-Limit erreicht.</span>{" "}
-            Max. {FREE_LIMIT} Projekte. Upgrade für unbegrenzte Projekte.
-          </p>
+          <div className="flex items-start gap-3">
+            <AlertCircle size={16} style={{ color: "#f5a623", marginTop: 1 }} />
+            <p className="text-sm" style={{ color: "#e6edf3" }}>
+              <span style={{ color: "#f5a623", fontWeight: 600 }}>Free-Limit erreicht.</span>{" "}
+              Max. {FREE_LIMIT} Projekte im Free-Plan.
+            </p>
+          </div>
+          <button
+            onClick={() => router.push("/upgrade")}
+            className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all hover:opacity-90"
+            style={{ background: "linear-gradient(135deg, #f5a623, #c4841c)", color: "#0d1b2e" }}
+          >
+            Upgraden
+          </button>
         </div>
       )}
 

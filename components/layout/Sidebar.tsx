@@ -21,7 +21,7 @@ const freeItems: NavItem[] = [
   { label: "Kunden", href: "/kunden", icon: <Users size={18} /> },
   { label: "Angebote", href: "/angebote", icon: <FileText size={18} /> },
   { label: "Projekte", href: "/projekte", icon: <Briefcase size={18} /> },
-  { label: "Zeiterfassung", href: "/zeiterfassung", icon: <Clock size={18} /> },
+  { label: "Zeiterfassung", href: "/zeiterfassung", icon: <Clock size={18} />, pro: true },
 ];
 
 const proItems: NavItem[] = [
@@ -74,6 +74,7 @@ export default function Sidebar() {
         <div className="space-y-0.5">
           {freeItems.map((item) => {
             const active = pathname === item.href;
+            const locked = item.pro && !isPro;
             return (
               <Link
                 key={item.href}
@@ -99,6 +100,7 @@ export default function Sidebar() {
               >
                 <span style={{ color: active ? "#00c6ff" : "inherit" }}>{item.icon}</span>
                 {item.label}
+                {locked && !active && <Lock size={12} className="ml-auto" style={{ color: "#f5a62388" }} />}
                 {active && <ChevronRight size={14} className="ml-auto" style={{ color: "#00c6ff" }} />}
               </Link>
             );
@@ -185,7 +187,7 @@ export default function Sidebar() {
               className="w-full py-1.5 rounded-lg text-xs font-semibold transition-all hover:opacity-90"
               style={{ background: "linear-gradient(135deg, #f5a623, #c4841c)", color: "#0d1b2e" }}
             >
-              Jetzt upgraden — €29/Monat
+              Jetzt upgraden — 9,99€/Monat
             </button>
           </div>
         </div>

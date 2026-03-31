@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Modal from "@/components/ui/Modal";
-import { Clock, Plus, Play, Square, Calendar, Briefcase, Loader, Trash2 } from "lucide-react";
+import { usePro } from "@/context/ProContext";
+import { Clock, Plus, Play, Square, Calendar, Briefcase, Loader, Trash2, Lock, Zap } from "lucide-react";
 
 interface TimeEntry {
   _id?: string;
@@ -16,6 +18,8 @@ interface TimeEntry {
 const EMPTY_FORM = { projectName: "", date: "", hours: 1, description: "" };
 
 export default function ZeiterfassungPage() {
+  const { isPro, loadingPro } = usePro();
+  const router = useRouter();
   const [entries, setEntries] = useState<TimeEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -107,6 +111,37 @@ export default function ZeiterfassungPage() {
     return entries.filter((e) => e.date === ds).reduce((sum, e) => sum + (e.hours || 0), 0);
   });
   const maxDay = Math.max(...dayHours, 1);
+
+  if (!loadingPro && !isPro) {
+    return (
+      <DashboardLayout title="Zeiterfassung" subtitle="Pro-Feature">
+        <div className="flex flex-col items-center justify-center py-24 gap-6">
+          <div
+            className="flex items-center justify-center w-16 h-16 rounded-full"
+            style={{ background: "#f5a62322", border: "1px solid #f5a62366" }}
+          >
+            <Lock size={28} style={{ color: "#f5a623" }} />
+          </div>
+          <div className="text-center">
+            <h2 className="text-xl font-bold mb-2" style={{ color: "#e6edf3", fontFamily: "var(--font-syne)" }}>
+              Zeiterfassung — Pro-Feature
+            </h2>
+            <p className="text-sm" style={{ color: "#8b9ab5" }}>
+              Stunden erfassen, Wochenübersicht und Timer sind nur im Pro-Plan verfügbar.
+            </p>
+          </div>
+          <button
+            onClick={() => router.push("/upgrade")}
+            className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all hover:opacity-90"
+            style={{ background: "linear-gradient(135deg, #f5a623, #c4841c)", color: "#0d1b2e" }}
+          >
+            <Zap size={16} />
+            Auf Pro upgraden — 9,99€/Monat
+          </button>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout title="Zeiterfassung" subtitle={`Diese Woche: ${weekHours}h`}>

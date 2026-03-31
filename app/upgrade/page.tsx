@@ -6,17 +6,19 @@ import { useAuth } from "@/context/AuthContext";
 import { usePro } from "@/context/ProContext";
 import {
   Zap, Check, Receipt, FileDown, Database,
-  UserCheck, Calculator, ArrowRight, Shield,
+  UserCheck, Calculator, ArrowRight, Shield, Clock, Briefcase, FileText,
 } from "lucide-react";
 
 const proFeatures = [
-  { icon: <Receipt size={16} />, label: "Rechnungen erstellen & versenden" },
+  { icon: <Briefcase size={16} />, label: "Unbegrenzte Projekte (Free: max. 3)" },
+  { icon: <FileText size={16} />, label: "Unbegrenzte Angebote (Free: max. 2)" },
+  { icon: <Clock size={16} />, label: "Zeiterfassung mit Timer & Wochenübersicht" },
   { icon: <FileDown size={16} />, label: "PDF-Export für Angebote & Rechnungen" },
+  { icon: <UserCheck size={16} />, label: "Mitarbeiter & Teamverwaltung" },
+  { icon: <Receipt size={16} />, label: "Rechnungen erstellen & versenden" },
   { icon: <Database size={16} />, label: "DATEV-Export für Steuerberater" },
-  { icon: <UserCheck size={16} />, label: "Mitarbeiterverwaltung" },
   { icon: <Calculator size={16} />, label: "VDE-Rechner (Leitungsschutz, Querschnitt)" },
   { icon: <Zap size={16} />, label: "VoltBase — Elektro-Wissensdatenbank" },
-  { icon: <Check size={16} />, label: "Unbegrenzte Kunden & Projekte" },
   { icon: <Shield size={16} />, label: "Prioritäts-Support" },
 ];
 
@@ -90,7 +92,7 @@ export default function UpgradePage() {
               className="text-4xl font-bold"
               style={{ color: "#f5a623", fontFamily: "var(--font-syne)" }}
             >
-              €29
+              9,99€
             </span>
             <span className="text-sm mb-2" style={{ color: "#8b9ab5" }}>/Monat</span>
           </div>

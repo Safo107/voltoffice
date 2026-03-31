@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Modal from "@/components/ui/Modal";
 import EmptyState from "@/components/ui/EmptyState";
+import { useRouter } from "next/navigation";
+import { usePro } from "@/context/ProContext";
 import {
   FileText, Plus, Search, MoreVertical, AlertCircle, Trash2, Edit, Loader, Send,
 } from "lucide-react";
@@ -27,7 +29,7 @@ interface Offer {
   items: OfferItem[];
 }
 
-const FREE_LIMIT = 3;
+const FREE_LIMIT = 2;
 
 const statusConfig = {
   draft: { label: "Entwurf", color: "#8b9ab5" },
@@ -39,6 +41,8 @@ const statusConfig = {
 const EMPTY_ITEM: OfferItem = { description: "", quantity: 1, unit: "Stk.", unitPrice: 0, total: 0 };
 
 export default function AngebotePage() {
+  const { isPro } = usePro();
+  const router = useRouter();
   const [angebote, setAngebote] = useState<Offer[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -140,10 +144,13 @@ export default function AngebotePage() {
       a.number?.toLowerCase().includes(search.toLowerCase()) ||
       a.customerName?.toLowerCase().includes(search.toLowerCase())
   );
-  const atLimit = angebote.length >= FREE_LIMIT;
+  const atLimit = !isPro && angebote.length >= FREE_LIMIT;
 
   return (
-    <DashboardLayout title="Angebote" subtitle={`${angebote.length} von ${FREE_LIMIT} Angeboten (Free)`}>
+    <DashboardLayout
+      title="Angebote"
+      subtitle={isPro ? `${angebote.length} Angebote` : `${angebote.length} von ${FREE_LIMIT} Angeboten (Free)`}
+    >
       <div className="flex items-center justify-between mb-6">
         <div
           className="flex items-center gap-2 px-4 py-2.5 rounded-xl flex-1 max-w-xs"
@@ -175,12 +182,21 @@ export default function AngebotePage() {
       </div>
 
       {atLimit && (
-        <div className="flex items-start gap-3 p-4 rounded-xl mb-4" style={{ background: "#f5a62310", border: "1px solid #f5a62333" }}>
-          <AlertCircle size={16} style={{ color: "#f5a623", marginTop: 1 }} />
-          <p className="text-sm" style={{ color: "#e6edf3" }}>
-            <span style={{ color: "#f5a623", fontWeight: 600 }}>Free-Limit erreicht.</span>{" "}
-            Max. 3 Angebote. Upgrade für unbegrenzte Angebote + Rechnungen.
-          </p>
+        <div className="flex items-center justify-between gap-3 p-4 rounded-xl mb-4" style={{ background: "#f5a62310", border: "1px solid #f5a62333" }}>
+          <div className="flex items-start gap-3">
+            <AlertCircle size={16} style={{ color: "#f5a623", marginTop: 1 }} />
+            <p className="text-sm" style={{ color: "#e6edf3" }}>
+              <span style={{ color: "#f5a623", fontWeight: 600 }}>Free-Limit erreicht.</span>{" "}
+              Max. {FREE_LIMIT} Angebote im Free-Plan.
+            </p>
+          </div>
+          <button
+            onClick={() => router.push("/upgrade")}
+            className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all hover:opacity-90"
+            style={{ background: "linear-gradient(135deg, #f5a623, #c4841c)", color: "#0d1b2e" }}
+          >
+            Upgraden
+          </button>
         </div>
       )}
 

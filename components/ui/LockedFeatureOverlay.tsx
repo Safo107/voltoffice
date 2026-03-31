@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { Lock, Zap } from "lucide-react";
 
 interface LockedFeatureOverlayProps {
@@ -7,6 +8,7 @@ interface LockedFeatureOverlayProps {
 }
 
 export default function LockedFeatureOverlay({ feature }: LockedFeatureOverlayProps) {
+  const router = useRouter();
   return (
     <div
       className="absolute inset-0 flex flex-col items-center justify-center rounded-xl z-10"
@@ -29,6 +31,7 @@ export default function LockedFeatureOverlay({ feature }: LockedFeatureOverlayPr
         Nur im Pro-Plan verfügbar
       </p>
       <button
+        onClick={() => router.push("/upgrade")}
         className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all hover:scale-105"
         style={{
           background: "linear-gradient(135deg, #f5a623, #c4841c)",
