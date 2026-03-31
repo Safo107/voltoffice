@@ -3,6 +3,10 @@ import { stripe } from "@/lib/stripe";
 import { getDb } from "@/lib/mongodb";
 
 export async function POST(req: NextRequest) {
+  if (!stripe) {
+    return NextResponse.json({ error: "Stripe nicht konfiguriert" }, { status: 503 });
+  }
+
   try {
     const { uid, email } = await req.json();
 
@@ -17,12 +21,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "STRIPE_PRICE_ID nicht konfiguriert" }, { status: 500 });
     }
 
-    // Prüfe ob Nutzer schon Stripe-Customer ist
     const db = await getDb();
     const userDoc = await db.collection("users").findOne({ uid });
     let customerId = userDoc?.stripeCustomerId as string | undefined;
 
-    // Customer erstellen falls noch nicht vorhanden
     if (!customerId) {
       const customer = await stripe.customers.create({
         email,
@@ -36,7 +38,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Stripe Checkout Session erstellen
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       payment_method_types: ["card"],

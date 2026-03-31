@@ -4,6 +4,10 @@ import { getDb } from "@/lib/mongodb";
 import type Stripe from "stripe";
 
 export async function POST(req: NextRequest) {
+  if (!stripe) {
+    return NextResponse.json({ error: "Stripe nicht konfiguriert" }, { status: 503 });
+  }
+
   const body = await req.text();
   const sig = req.headers.get("stripe-signature");
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
