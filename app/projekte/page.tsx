@@ -25,7 +25,7 @@ const statusConfig = {
 
 const FREE_LIMIT = 3;
 
-const EMPTY_FORM = { title: "", customerName: "", status: "active" as const, startDate: "", description: "" };
+const EMPTY_FORM = { title: "", customerName: "", status: "active" as Project["status"], startDate: "", description: "" };
 
 export default function ProjektePage() {
   const { isPro } = usePro();
