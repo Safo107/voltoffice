@@ -1,3 +1,4 @@
+import Link from "next/link";
 import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
 
@@ -14,6 +15,13 @@ export default function DashboardLayout({ children, title, subtitle }: Dashboard
       <div className="flex flex-col flex-1 overflow-hidden">
         <Topbar title={title} subtitle={subtitle} />
         <main className="flex-1 overflow-y-auto p-6">{children}</main>
+        <footer className="shrink-0 flex items-center justify-center gap-4 px-6 py-2 text-xs" style={{ borderTop: "1px solid #1e3a5f", color: "#4a5568" }}>
+          <span>© 2026 ElektroGenius</span>
+          <span>·</span>
+          <Link href="/impressum" className="transition-colors hover:text-[#8b9ab5]">Impressum</Link>
+          <span>·</span>
+          <Link href="/datenschutz" className="transition-colors hover:text-[#8b9ab5]">Datenschutz</Link>
+        </footer>
       </div>
     </div>
   );
