@@ -102,8 +102,12 @@ export default function ProjektePage() {
 
   const handleDelete = async (p: Project) => {
     if (!confirm(`Projekt "${p.title}" wirklich löschen?`)) return;
-    await fetch(`/api/projekte/${p._id}`, { method: "DELETE" });
-    await fetchProjekte();
+    try {
+      await fetch(`/api/projekte/${p._id}`, { method: "DELETE" });
+      await fetchProjekte();
+    } catch {
+      //
+    }
     setMenuOpen(null);
   };
 

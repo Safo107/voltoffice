@@ -65,10 +65,11 @@ export default function KundenPage() {
     setLoading(true);
     try {
       const res = await fetch("/api/kunden");
+      if (!res.ok) throw new Error(`Fehler ${res.status}`);
       const data = await res.json();
-      setKunden(data);
+      setKunden(Array.isArray(data) ? data : []);
     } catch {
-      // Stille Fehler für Demo
+      setKunden([]);
     } finally {
       setLoading(false);
     }
@@ -124,8 +125,12 @@ export default function KundenPage() {
   const handleDelete = async (kunde: Customer) => {
     if (!confirm(`Kunde "${kunde.name}" wirklich löschen?`)) return;
     const id = kunde._id || kunde.id;
-    await fetch(`/api/kunden/${id}`, { method: "DELETE" });
-    await fetchKunden();
+    try {
+      await fetch(`/api/kunden/${id}`, { method: "DELETE" });
+      await fetchKunden();
+    } catch {
+      //
+    }
     setMenuOpen(null);
   };
 

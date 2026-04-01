@@ -95,12 +95,16 @@ export default function AngebotePage() {
 
   const handleSend = async (a: Offer) => {
     if (a.status === "sent") return;
-    await fetch(`/api/angebote/${a._id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: "sent" }),
-    });
-    await fetchAngebote();
+    try {
+      await fetch(`/api/angebote/${a._id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "sent" }),
+      });
+      await fetchAngebote();
+    } catch {
+      //
+    }
     setMenuOpen(null);
   };
 
@@ -141,8 +145,12 @@ export default function AngebotePage() {
 
   const handleDelete = async (a: Offer) => {
     if (!confirm(`Angebot #${a.number} wirklich löschen?`)) return;
-    await fetch(`/api/angebote/${a._id}`, { method: "DELETE" });
-    await fetchAngebote();
+    try {
+      await fetch(`/api/angebote/${a._id}`, { method: "DELETE" });
+      await fetchAngebote();
+    } catch {
+      //
+    }
     setMenuOpen(null);
   };
 

@@ -87,8 +87,12 @@ export default function ZeiterfassungPage() {
 
   const handleDelete = async (entry: TimeEntry) => {
     if (!confirm(`Eintrag "${entry.description || entry.projectName}" löschen?`)) return;
-    await fetch(`/api/zeiterfassung/${entry._id}`, { method: "DELETE" });
-    await fetchEntries();
+    try {
+      await fetch(`/api/zeiterfassung/${entry._id}`, { method: "DELETE" });
+      await fetchEntries();
+    } catch {
+      //
+    }
   };
 
   const totalHours = entries.reduce((sum, e) => sum + (e.hours || 0), 0);

@@ -16,10 +16,9 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const db = await getDb();
 
-    // Angebotsnummer generieren
-    const count = await db.collection("angebote").countDocuments();
+    // Angebotsnummer generieren (timestamp-basiert um Race Conditions zu vermeiden)
     const year = new Date().getFullYear();
-    const number = `${year}-${String(count + 1).padStart(3, "0")}`;
+    const number = `${year}-${Date.now().toString(36).toUpperCase().slice(-4)}`;
 
     const doc = {
       ...body,

@@ -25,7 +25,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Webhook Fehler: ${msg}` }, { status: 400 });
   }
 
-  const db = await getDb();
+  let db;
+  try {
+    db = await getDb();
+  } catch {
+    return NextResponse.json({ error: "Datenbankfehler" }, { status: 500 });
+  }
 
   switch (event.type) {
     case "checkout.session.completed": {

@@ -13,6 +13,7 @@ import {
   CheckCircle,
 } from "lucide-react";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 const sections = [
   { id: "profil", label: "Profil & Betrieb", icon: <User size={16} />, color: "#00c6ff" },
@@ -41,6 +42,7 @@ function inputStyle(focused = false) {
 }
 
 export default function EinstellungenPage() {
+  const router = useRouter();
   const [active, setActive] = useState("profil");
 
   // Profil
@@ -467,6 +469,7 @@ export default function EinstellungenPage() {
                 </div>
 
                 <button
+                  onClick={() => router.push("/upgrade")}
                   className="w-full py-3 rounded-xl text-sm font-semibold transition-all hover:opacity-90"
                   style={{ background: "linear-gradient(135deg, #f5a623, #c4841c)", color: "#0d1b2e" }}
                 >
