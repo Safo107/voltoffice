@@ -445,7 +445,7 @@ export default function EinstellungenPage() {
                     <p className="text-sm" style={{ color: "#8b9ab5" }}>Alles unlimitiert + alle Pro-Features</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-2xl font-bold" style={{ color: "#f5a623", fontFamily: "var(--font-syne)" }}>49 €</p>
+                    <p className="text-2xl font-bold" style={{ color: "#f5a623", fontFamily: "var(--font-syne)" }}>9,99 €</p>
                     <p className="text-xs" style={{ color: "#8b9ab5" }}>/Monat</p>
                   </div>
                 </div>
