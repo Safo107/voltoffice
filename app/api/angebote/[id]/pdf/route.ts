@@ -3,123 +3,157 @@ import { getDb } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 
-function formatDate(iso: string) {
+function fDate(iso: string) {
   return new Date(iso).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
-
-function formatEuro(value: number) {
-  return value.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €";
+function fEur(v: number) {
+  return v.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " \u20AC";
 }
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
     const db = await getDb();
-    const angebot = await db.collection("angebote").findOne({ _id: new ObjectId(id) });
-
-    if (!angebot) {
-      return NextResponse.json({ error: "Angebot nicht gefunden" }, { status: 404 });
-    }
+    const a = await db.collection("angebote").findOne({ _id: new ObjectId(id) });
+    if (!a) return NextResponse.json({ error: "Angebot nicht gefunden" }, { status: 404 });
 
     const pdfDoc = await PDFDocument.create();
     const page = pdfDoc.addPage([595, 842]);
-    const { height } = page.getSize();
+    const { width, height } = page.getSize();
 
-    const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-    const fontReg = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+    const reg  = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
-    const blue = rgb(0, 0.776, 1);
-    const dark = rgb(0.05, 0.11, 0.18);
-    const muted = rgb(0.54, 0.60, 0.71);
-    const white = rgb(1, 1, 1);
+    // Farben — weißes, professionelles Design
+    const C_DARK   = rgb(0.08, 0.13, 0.22);
+    const C_ACCENT = rgb(0.04, 0.44, 0.68);
+    const C_MUTED  = rgb(0.45, 0.50, 0.58);
+    const C_LIGHT  = rgb(0.96, 0.97, 0.99);
+    const C_BORDER = rgb(0.84, 0.87, 0.91);
+    const C_WHITE  = rgb(1, 1, 1);
 
-    // Header Bar
-    page.drawRectangle({ x: 0, y: height - 80, width: 595, height: 80, color: dark });
-    page.drawText("ElektroGenius", { x: 40, y: height - 34, size: 18, font: fontBold, color: blue });
-    page.drawText("VoltOffice", { x: 40, y: height - 52, size: 10, font: fontReg, color: muted });
-    page.drawText("ANGEBOT", { x: 430, y: height - 40, size: 20, font: fontBold, color: white });
-    page.drawText(`Nr: ${angebot.number}`, { x: 430, y: height - 58, size: 9, font: fontReg, color: muted });
+    // ── Dünner Akzentbalken oben ──────────────────────────────────────────────
+    page.drawRectangle({ x: 0, y: height - 5, width, height: 5, color: C_ACCENT });
 
-    // Absender
-    let y = height - 110;
-    page.drawText("ElektroGenius GmbH", { x: 40, y, size: 9, font: fontBold, color: dark });
-    y -= 13;
-    page.drawText("info@elektrogenius.de  ·  elektrogenius.de", { x: 40, y, size: 8, font: fontReg, color: muted });
-
-    // Empfänger
-    y = height - 160;
-    page.drawText("Angebotempfänger", { x: 40, y, size: 8, font: fontReg, color: muted });
-    y -= 14;
-    page.drawText(angebot.customerName || "–", { x: 40, y, size: 12, font: fontBold, color: dark });
-
-    // Datum & Gültig bis
-    const dateX = 360;
-    let dateY = height - 160;
-    page.drawText("Angebotsdatum", { x: dateX, y: dateY, size: 8, font: fontReg, color: muted });
-    dateY -= 13;
-    page.drawText(angebot.createdAt ? formatDate(angebot.createdAt) : "–", { x: dateX, y: dateY, size: 10, font: fontBold, color: dark });
-    dateY -= 18;
-    page.drawText("Gültig bis", { x: dateX, y: dateY, size: 8, font: fontReg, color: muted });
-    dateY -= 13;
-    page.drawText(angebot.validUntil ? formatDate(angebot.validUntil) : "–", { x: dateX, y: dateY, size: 10, font: fontBold, color: dark });
-
-    // Trennlinie
-    y = height - 250;
-    page.drawLine({ start: { x: 40, y }, end: { x: 555, y }, thickness: 1, color: rgb(0.87, 0.91, 0.96) });
-
-    // Tabellenkopf
-    y -= 20;
-    page.drawRectangle({ x: 40, y: y - 5, width: 515, height: 20, color: rgb(0.94, 0.97, 1) });
-    page.drawText("Beschreibung", { x: 48, y, size: 8, font: fontBold, color: dark });
-    page.drawText("Menge", { x: 340, y, size: 8, font: fontBold, color: dark });
-    page.drawText("Einheit", { x: 390, y, size: 8, font: fontBold, color: dark });
-    page.drawText("Einzelpreis", { x: 435, y, size: 8, font: fontBold, color: dark });
-    page.drawText("Gesamt", { x: 502, y, size: 8, font: fontBold, color: dark });
-
-    // Positionen
-    const items: Array<{ description: string; quantity: number; unit: string; unitPrice: number; total: number }> = angebot.items || [];
-    y -= 22;
-    for (const item of items) {
-      const desc = String(item.description || "").substring(0, 55);
-      page.drawText(desc, { x: 48, y, size: 8, font: fontReg, color: dark });
-      page.drawText(String(item.quantity), { x: 340, y, size: 8, font: fontReg, color: dark });
-      page.drawText(String(item.unit || ""), { x: 390, y, size: 8, font: fontReg, color: dark });
-      page.drawText(formatEuro(item.unitPrice), { x: 435, y, size: 8, font: fontReg, color: dark });
-      page.drawText(formatEuro(item.total), { x: 502, y, size: 8, font: fontBold, color: dark });
-      y -= 18;
-      page.drawLine({ start: { x: 40, y: y + 4 }, end: { x: 555, y: y + 4 }, thickness: 0.5, color: rgb(0.93, 0.93, 0.93) });
+    // ── Firmenname (links) ────────────────────────────────────────────────────
+    const firma = String(a.firmenname || "");
+    const slogan = String(a.firmenslogan || "");
+    if (firma) {
+      page.drawText(firma, { x: 40, y: height - 38, size: 15, font: bold, color: C_DARK });
+    }
+    if (slogan) {
+      page.drawText(slogan, { x: 40, y: height - 54, size: 8, font: reg, color: C_MUTED });
+    }
+    const adresse = [a.firmenStrasse, a.firmenOrt].filter(Boolean).join("  ·  ");
+    if (adresse) {
+      page.drawText(adresse, { x: 40, y: firma ? height - 66 : height - 38, size: 7.5, font: reg, color: C_MUTED });
     }
 
-    // Summen
-    y -= 10;
-    const netto = (angebot.total || 0) / 1.19;
-    const mwst = (angebot.total || 0) - netto;
+    // ── Dokumenttyp (rechts) ──────────────────────────────────────────────────
+    const titleW = bold.widthOfTextAtSize("ANGEBOT", 22);
+    page.drawText("ANGEBOT", { x: width - 40 - titleW, y: height - 38, size: 22, font: bold, color: C_DARK });
+    const numText = "Nr. " + (a.number || "");
+    const numW = reg.widthOfTextAtSize(numText, 9);
+    page.drawText(numText, { x: width - 40 - numW, y: height - 54, size: 9, font: reg, color: C_MUTED });
 
-    page.drawLine({ start: { x: 350, y }, end: { x: 555, y }, thickness: 1, color: rgb(0.87, 0.91, 0.96) });
+    // ── Trennlinie ────────────────────────────────────────────────────────────
+    let y = height - 85;
+    page.drawLine({ start: { x: 40, y }, end: { x: width - 40, y }, thickness: 0.75, color: C_BORDER });
+
+    // ── Empfänger (links) + Datum (rechts) ────────────────────────────────────
+    y -= 20;
+    page.drawText("An", { x: 40, y, size: 7.5, font: reg, color: C_MUTED });
+    y -= 14;
+    page.drawText(a.customerName || "–", { x: 40, y, size: 12, font: bold, color: C_DARK });
+    if (a.customerAddress) {
+      y -= 13;
+      page.drawText(a.customerAddress, { x: 40, y, size: 9, font: reg, color: C_MUTED });
+    }
+
+    const dateX = width - 180;
+    let dateY = height - 105;
+    const dateRows: [string, string][] = [
+      ["Angebotsdatum", a.createdAt ? fDate(a.createdAt) : "–"],
+      ["Gültig bis", a.validUntil ? fDate(a.validUntil) : "–"],
+    ];
+    for (const [label, val] of dateRows) {
+      page.drawText(label, { x: dateX, y: dateY, size: 7.5, font: reg, color: C_MUTED });
+      dateY -= 12;
+      page.drawText(val, { x: dateX, y: dateY, size: 10, font: bold, color: C_DARK });
+      dateY -= 16;
+    }
+
+    // Trennlinie vor Tabelle
+    y = Math.min(y, dateY) - 16;
+    page.drawLine({ start: { x: 40, y }, end: { x: width - 40, y }, thickness: 0.75, color: C_BORDER });
+
+    // ── Tabellenheader ────────────────────────────────────────────────────────
+    y -= 20;
+    page.drawRectangle({ x: 40, y: y - 6, width: 515, height: 20, color: C_DARK });
+    const cols = { desc: 48, menge: 340, einheit: 385, ep: 430, ges: 500 };
+    [
+      ["Beschreibung", cols.desc],
+      ["Menge", cols.menge],
+      ["Einheit", cols.einheit],
+      ["Einzelpreis", cols.ep],
+      ["Gesamt", cols.ges],
+    ].forEach(([t, x]) =>
+      page.drawText(String(t), { x: Number(x), y, size: 8, font: bold, color: C_WHITE })
+    );
+
+    // ── Positionen ────────────────────────────────────────────────────────────
+    const items: Array<{ description?: string; quantity?: number; unit?: string; unitPrice?: number; total?: number }> = a.items || [];
+    y -= 22;
+    let posNr = 1;
+    for (const item of items) {
+      const bg = posNr % 2 === 0 ? C_LIGHT : C_WHITE;
+      page.drawRectangle({ x: 40, y: y - 5, width: 515, height: 18, color: bg });
+      page.drawText(String(item.description || "").substring(0, 58), { x: cols.desc, y, size: 8, font: reg, color: C_DARK });
+      page.drawText(String(item.quantity ?? ""), { x: cols.menge, y, size: 8, font: reg, color: C_DARK });
+      page.drawText(String(item.unit || ""), { x: cols.einheit, y, size: 8, font: reg, color: C_DARK });
+      page.drawText(fEur(item.unitPrice ?? 0), { x: cols.ep, y, size: 8, font: reg, color: C_DARK });
+      page.drawText(fEur(item.total ?? 0), { x: cols.ges, y, size: 8, font: bold, color: C_DARK });
+      posNr++;
+      y -= 18;
+      if (y < 160) { y = 160; break; }
+    }
+
+    // ── Trennlinie + Summen ───────────────────────────────────────────────────
+    y -= 8;
+    page.drawLine({ start: { x: 40, y }, end: { x: width - 40, y }, thickness: 0.75, color: C_BORDER });
     y -= 16;
-    page.drawText("Nettobetrag:", { x: 370, y, size: 9, font: fontReg, color: muted });
-    page.drawText(formatEuro(netto), { x: 502, y, size: 9, font: fontReg, color: dark });
-    y -= 14;
-    page.drawText("MwSt. 19%:", { x: 370, y, size: 9, font: fontReg, color: muted });
-    page.drawText(formatEuro(mwst), { x: 502, y, size: 9, font: fontReg, color: dark });
-    y -= 14;
-    page.drawLine({ start: { x: 350, y: y + 4 }, end: { x: 555, y: y + 4 }, thickness: 1, color: blue });
-    y -= 14;
-    page.drawRectangle({ x: 350, y: y - 6, width: 205, height: 24, color: dark });
-    page.drawText("Gesamtbetrag:", { x: 360, y, size: 10, font: fontBold, color: white });
-    page.drawText(formatEuro(angebot.total || 0), { x: 490, y, size: 11, font: fontBold, color: blue });
+    const brutto = a.total || 0;
+    const netto  = brutto / 1.19;
+    const mwst   = brutto - netto;
 
-    // Fußzeile
-    page.drawLine({ start: { x: 40, y: 55 }, end: { x: 555, y: 55 }, thickness: 0.5, color: rgb(0.87, 0.91, 0.96) });
-    page.drawText("ElektroGenius  ·  elektrogenius.de  ·  info@elektrogenius.de", { x: 40, y: 40, size: 8, font: fontReg, color: muted });
-    page.drawText(`Angebot ${angebot.number}`, { x: 470, y: 40, size: 8, font: fontReg, color: muted });
+    const sumRows: [string, string, boolean][] = [
+      ["Nettobetrag:", fEur(netto), false],
+      ["zzgl. MwSt. 19 %:", fEur(mwst), false],
+    ];
+    for (const [label, val] of sumRows) {
+      page.drawText(label, { x: 380, y, size: 9, font: reg, color: C_MUTED });
+      page.drawText(val, { x: width - 40 - reg.widthOfTextAtSize(val, 9), y, size: 9, font: reg, color: C_DARK });
+      y -= 13;
+    }
+    page.drawLine({ start: { x: 360, y: y + 4 }, end: { x: width - 40, y: y + 4 }, thickness: 1, color: C_ACCENT });
+    y -= 14;
+    // Gesamtbetrag-Box
+    page.drawRectangle({ x: 360, y: y - 6, width: 195, height: 24, color: C_DARK });
+    page.drawText("Gesamtbetrag:", { x: 368, y, size: 9, font: bold, color: C_WHITE });
+    const bruttoStr = fEur(brutto);
+    page.drawText(bruttoStr, { x: width - 40 - bold.widthOfTextAtSize(bruttoStr, 11), y: y - 1, size: 11, font: bold, color: C_WHITE });
+
+    // ── Footer ────────────────────────────────────────────────────────────────
+    const fy = 45;
+    page.drawLine({ start: { x: 40, y: fy + 18 }, end: { x: width - 40, y: fy + 18 }, thickness: 0.5, color: C_BORDER });
+    page.drawText("Angebot Nr. " + (a.number || ""), { x: 40, y: fy + 6, size: 7.5, font: reg, color: C_MUTED });
+    page.drawText("Seite 1", { x: width - 40 - reg.widthOfTextAtSize("Seite 1", 7.5), y: fy + 6, size: 7.5, font: reg, color: C_MUTED });
 
     const pdfBytes = await pdfDoc.save();
-
     return new NextResponse(Buffer.from(pdfBytes), {
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="Angebot-${angebot.number}.pdf"`,
+        "Content-Disposition": `attachment; filename="Angebot-${a.number || id}.pdf"`,
       },
     });
   } catch (e) {
