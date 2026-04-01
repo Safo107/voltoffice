@@ -1,67 +1,315 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { usePro } from "@/context/ProContext";
 import { useRouter } from "next/navigation";
-import { Calculator, Zap, Lock, Loader, ChevronDown, AlertCircle } from "lucide-react";
+import {
+  Zap, Lock, Loader, AlertTriangle, CheckCircle, Wrench,
+  ThumbsUp, ChevronDown,
+} from "lucide-react";
 
-// ─── Berechnungsfunktionen ──────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
+//  VDE 0298-4 DATEN-TABELLEN (zentrale Config)
+// ═══════════════════════════════════════════════════════════════
 
-function berechneQuerschnitt(strom: number, laenge: number, spannung: number, material: string, phasig: number) {
-  // ρ in Ω·mm²/m
-  const rho = material === "cu" ? 0.0178 : 0.0282;
+const CROSS_SECTIONS = [1.5, 2.5, 4, 6, 10, 16, 25, 35, 50, 70, 95, 120];
+
+// IZ Grundwerte [A] — Cu, PVC 70°C, 3 belastete Leiter, 30°C Umgebung
+// Quelle: VDE 0298-4:2013-06, Tabelle 3
+const IZ_CU_PVC: Record<string, Record<number, number>> = {
+  B1: { 1.5:15.5, 2.5:21, 4:28, 6:36, 10:50, 16:68, 25:89, 35:110, 50:134, 70:171, 95:207, 120:239 },
+  B2: { 1.5:13.5, 2.5:18, 4:24, 6:31, 10:42, 16:56, 25:73, 35:89,  50:108, 70:136, 95:164, 120:188 },
+  C:  { 1.5:17.5, 2.5:24, 4:32, 6:41, 10:57, 16:76, 25:96, 35:119, 50:144, 70:184, 95:223, 120:259 },
+  E:  { 1.5:19.5, 2.5:27, 4:36, 6:46, 10:63, 16:85, 25:112,35:138, 50:168, 70:213, 95:258, 120:299 },
+};
+
+// Cu, XLPE 90°C, 3 belastete Leiter, VDE 0298-4 Tab. 4
+const IZ_CU_XLPE: Record<string, Record<number, number>> = {
+  B1: { 1.5:19,  2.5:25, 4:34, 6:43, 10:60, 16:80, 25:101,35:126, 50:153, 70:196, 95:238, 120:276 },
+  B2: { 1.5:16.5,2.5:22, 4:30, 6:38, 10:52, 16:69, 25:90, 35:111, 50:133, 70:168, 95:201, 120:232 },
+  C:  { 1.5:22,  2.5:30, 4:40, 6:51, 10:70, 16:94, 25:119,35:147, 50:179, 70:229, 95:278, 120:322 },
+  E:  { 1.5:24,  2.5:33, 4:45, 6:58, 10:80, 16:107,25:138,35:171, 50:209, 70:269, 95:328, 120:382 },
+};
+
+// Al-Faktor ≈ 0.78 (VDE 0298-4)
+const AL_FAKTOR = 0.78;
+
+// Temperaturfaktoren f1 — Basis 30°C, PVC 70°C (VDE 0298-4 Tab. B.52.14)
+const TEMP_FAKTOREN_PVC: Record<number, number> = {
+  10:1.22, 15:1.17, 20:1.12, 25:1.06, 30:1.00,
+  35:0.94, 40:0.87, 45:0.79, 50:0.71,
+};
+const TEMP_FAKTOREN_XLPE: Record<number, number> = {
+  10:1.15, 15:1.12, 20:1.08, 25:1.04, 30:1.00,
+  35:0.96, 40:0.91, 45:0.87, 50:0.82,
+};
+
+// Häufungsfaktoren f2 (VDE 0298-4 Tab. B.52.17)
+const HAEUFUNG_FAKTOREN: Record<number, number> = {
+  1:1.00, 2:0.80, 3:0.70, 4:0.65, 5:0.60,
+  6:0.57, 7:0.54, 8:0.52, 9:0.50, 10:0.48,
+};
+
+// Standard-LS-Schalter Nennströme
+const LS_NORMEN = [6,10,13,16,20,25,32,40,50,63,80,100,125,160,200,250];
+
+// ═══════════════════════════════════════════════════════════════
+//  ENGINE-FUNKTIONEN
+// ═══════════════════════════════════════════════════════════════
+
+function getIz(qs: number, verlegeart: string, material: string, isolation: string): number {
+  const table = isolation === "xlpe"
+    ? (material === "cu" ? IZ_CU_XLPE : IZ_CU_XLPE)
+    : (material === "cu" ? IZ_CU_PVC  : IZ_CU_PVC);
+  const base = table[verlegeart]?.[qs] ?? 0;
+  return material === "al" ? base * AL_FAKTOR : base;
+}
+
+function getTempFaktor(temp: number, isolation: string): number {
+  const temps = isolation === "xlpe" ? TEMP_FAKTOREN_XLPE : TEMP_FAKTOREN_PVC;
+  const key = Math.round(temp / 5) * 5;
+  return temps[key] ?? 1.0;
+}
+
+function getHaeufungFaktor(n: number): number {
+  return HAEUFUNG_FAKTOREN[Math.min(n, 10)] ?? 0.48;
+}
+
+function berechneIb(leistung: number, spannung: number, cosPhi: number, phasig: number): number {
+  if (cosPhi <= 0 || spannung <= 0) return 0;
+  return phasig === 3
+    ? leistung / (Math.sqrt(3) * spannung * cosPhi)
+    : leistung / (spannung * cosPhi);
+}
+
+function berechneSpannungsfall(
+  ib: number, laenge: number, querschnitt: number,
+  material: string, phasig: number, spannung: number, cosPhi: number
+): { deltaU: number; prozent: number } {
+  const kappa = material === "cu" ? 56 : 35;
   const k = phasig === 3 ? Math.sqrt(3) : 2;
-  const uFall = spannung * 0.03; // max. 3% Spannungsfall
-  const querschnitt = (k * rho * laenge * strom) / uFall;
-  // Normwert runden
-  const normen = [1.5, 2.5, 4, 6, 10, 16, 25, 35, 50, 70, 95, 120];
-  return normen.find((n) => n >= querschnitt) ?? "> 120";
+  const deltaU = (k * laenge * ib * cosPhi) / (kappa * querschnitt);
+  return { deltaU, prozent: (deltaU / spannung) * 100 };
 }
 
-function berechneAbsicherung(querschnitt: number, verlegeart: string) {
-  // Vereinfachte Tabelle nach VDE 0298 (Cu, PVC)
-  const tabelle: Record<string, Record<number, number>> = {
-    A: { 1.5: 10, 2.5: 16, 4: 20, 6: 25, 10: 32, 16: 50, 25: 63, 35: 80, 50: 100, 70: 125, 95: 160, 120: 200 },
-    B: { 1.5: 13, 2.5: 18, 4: 24, 6: 31, 10: 44, 16: 57, 25: 73, 35: 89, 50: 108, 70: 136, 95: 166, 120: 194 },
-    C: { 1.5: 15, 2.5: 21, 4: 28, 6: 36, 10: 50, 16: 66, 25: 84, 35: 104, 50: 125, 70: 160, 95: 196, 120: 232 },
-  };
-  const row = tabelle[verlegeart] || tabelle["B"];
-  return row[querschnitt] ?? "k.A.";
+// Magic Fix: nächsten ausreichenden Querschnitt finden
+function magicFixQuerschnitt(
+  ib: number, verlegeart: string, material: string, isolation: string,
+  temp: number, haeufung: number, inNenn: number
+): number | null {
+  for (const qs of CROSS_SECTIONS) {
+    const izBase = getIz(qs, verlegeart, material, isolation);
+    const iz = izBase * getTempFaktor(temp, isolation) * getHaeufungFaktor(haeufung);
+    if (ib <= inNenn && inNenn <= iz) return qs;
+  }
+  return null;
 }
 
-function berechneSpannungsfall(strom: number, laenge: number, querschnitt: number, material: string, phasig: number, spannung: number) {
-  const rho = material === "cu" ? 0.0178 : 0.0282;
-  const k = phasig === 3 ? Math.sqrt(3) : 2;
-  const delta_u = (k * rho * laenge * strom) / querschnitt;
-  const prozent = (delta_u / spannung) * 100;
-  return { volt: delta_u, prozent };
+function magicFixQuerschnittSpannungsfall(
+  ib: number, laenge: number, material: string,
+  phasig: number, spannung: number, cosPhi: number, grenzwert: number
+): number | null {
+  for (const qs of CROSS_SECTIONS) {
+    const { prozent } = berechneSpannungsfall(ib, laenge, qs, material, phasig, spannung, cosPhi);
+    if (prozent <= grenzwert) return qs;
+  }
+  return null;
 }
 
-// ─── Komponente ────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
+//  UI-HILFSFUNKTIONEN
+// ═══════════════════════════════════════════════════════════════
 
-type Rechner = "querschnitt" | "absicherung" | "spannungsfall";
+function Seg({ options, value, onChange }: {
+  options: { val: string | number; label: string }[];
+  value: string | number;
+  onChange: (v: any) => void;
+}) {
+  return (
+    <div className="flex rounded-xl overflow-hidden" style={{ border: "1px solid #1e3a5f" }}>
+      {options.map((o) => (
+        <button
+          key={o.val}
+          onClick={() => onChange(o.val)}
+          className="flex-1 py-2.5 text-xs font-bold transition-all"
+          style={{
+            background: value === o.val ? "#00c6ff22" : "#0d1b2e",
+            color: value === o.val ? "#00c6ff" : "#8b9ab5",
+            borderRight: "1px solid #1e3a5f",
+            minHeight: 48,
+          }}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function NumInput({ label, value, onChange, unit, step = 1, min = 0 }: {
+  label: string; value: number; onChange: (v: number) => void;
+  unit?: string; step?: number; min?: number;
+}) {
+  return (
+    <div>
+      <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>
+        {label}{unit && <span style={{ color: "#4a6fa5" }}> ({unit})</span>}
+      </label>
+      <input
+        type="number"
+        inputMode="decimal"
+        step={step}
+        min={min}
+        value={value}
+        onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
+        className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
+        style={{ background: "#0d1b2e", border: "1px solid #1e3a5f", color: "#e6edf3", minHeight: 48 }}
+      />
+    </div>
+  );
+}
+
+function SelectInput({ label, value, onChange, options }: {
+  label: string; value: string | number;
+  onChange: (v: any) => void;
+  options: { val: string | number; label: string }[];
+}) {
+  return (
+    <div>
+      <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>{label}</label>
+      <div className="relative">
+        <select
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-full px-3 py-2.5 rounded-xl text-sm outline-none appearance-none pr-8"
+          style={{ background: "#0d1b2e", border: "1px solid #1e3a5f", color: "#e6edf3", minHeight: 48 }}
+        >
+          {options.map((o) => <option key={o.val} value={o.val}>{o.label}</option>)}
+        </select>
+        <ChevronDown size={14} style={{ color: "#4a6fa5", position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
+      </div>
+    </div>
+  );
+}
+
+function AuslastungsBar({ wert, max, einheit, grenzWarnPct = 0.8 }: {
+  wert: number; max: number; einheit: string; grenzWarnPct?: number;
+}) {
+  const pct = max > 0 ? Math.min(wert / max, 1) : 0;
+  const farbe = pct >= 1 ? "#ef4444" : pct >= grenzWarnPct ? "#f5a623" : "#22c55e";
+  return (
+    <div>
+      <div className="flex justify-between text-xs mb-1.5" style={{ color: "#8b9ab5" }}>
+        <span>Auslastung</span>
+        <span style={{ color: farbe, fontWeight: 700 }}>{(pct * 100).toFixed(1)}%</span>
+      </div>
+      <div className="w-full rounded-full h-3 overflow-hidden" style={{ background: "#1e3a5f" }}>
+        <div
+          className="h-full rounded-full transition-all duration-300"
+          style={{ width: `${pct * 100}%`, background: farbe }}
+        />
+      </div>
+      <div className="flex justify-between text-xs mt-1" style={{ color: "#4a6fa5" }}>
+        <span>{wert.toFixed(1)} {einheit}</span>
+        <span>{max.toFixed(1)} {einheit}</span>
+      </div>
+    </div>
+  );
+}
+
+function MagicFixBtn({ text, onClick }: { text: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-bold transition-all hover:opacity-90"
+      style={{ background: "linear-gradient(135deg,#f5a623,#c4841c)", color: "#0d1b2e", minHeight: 48 }}
+    >
+      <Wrench size={16} /> ⚡ Auto-Fix: {text}
+    </button>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  HAUPTKOMPONENTE
+// ═══════════════════════════════════════════════════════════════
+
+type Tab = "leitungsschutz" | "spannungsfall" | "abschalt";
 
 export default function VdeRechnerPage() {
   const { isPro, loadingPro } = usePro();
   const router = useRouter();
-  const [active, setActive] = useState<Rechner>("querschnitt");
+  const [activeTab, setActiveTab] = useState<Tab>("leitungsschutz");
 
-  // Querschnitt
-  const [qs, setQs] = useState({ strom: 16, laenge: 20, spannung: 230, material: "cu", phasig: 1 });
-  const [qsResult, setQsResult] = useState<number | string | null>(null);
+  // ── Modul 1: Leitungsschutz ─────────────────────────────────
+  const [phasig, setPhasig] = useState<number>(3);
+  const [leistung, setLeistung] = useState<number>(3000);
+  const [spannung, setSpannung] = useState<number>(400);
+  const [cosPhi, setCosPhi] = useState<number>(0.9);
+  const [material, setMaterial] = useState<string>("cu");
+  const [isolation, setIsolation] = useState<string>("pvc");
+  const [verlegeart, setVerlegeart] = useState<string>("B2");
+  const [temperatur, setTemperatur] = useState<number>(30);
+  const [haeufung, setHaeufung] = useState<number>(1);
+  const [inNenn, setInNenn] = useState<number>(16);
+  const [manualQs, setManualQs] = useState<number>(2.5);
+  const [fixedQs, setFixedQs] = useState<number | null>(null);
 
-  // Absicherung
-  const [abs, setAbs] = useState({ querschnitt: 2.5, verlegeart: "B" });
-  const [absResult, setAbsResult] = useState<number | string | null>(null);
+  // ── Modul 2: Spannungsfall ──────────────────────────────────
+  const [sfLaenge, setSfLaenge] = useState<number>(30);
+  const [sfQs, setSfQs] = useState<number>(2.5);
+  const [sfFixQs, setSfFixQs] = useState<number | null>(null);
+  const [sfGrenzwert, setSfGrenzwert] = useState<number>(3);
 
-  // Spannungsfall
-  const [sf, setSf] = useState({ strom: 16, laenge: 30, querschnitt: 2.5, material: "cu", phasig: 1, spannung: 230 });
-  const [sfResult, setSfResult] = useState<{ volt: number; prozent: number } | null>(null);
+  // ── Modul 3: Abschaltbedingung ──────────────────────────────
+  const [u0, setU0] = useState<number>(230);
+  const [lsTyp, setLsTyp] = useState<string>("B");
+  const [lsIn, setLsIn] = useState<number>(16);
+  const [zsReal, setZsReal] = useState<number>(0.8);
+  const [abLaenge, setAbLaenge] = useState<number>(50);
+  const [abQs, setAbQs] = useState<number>(2.5);
+  const [abMat, setAbMat] = useState<string>("cu");
 
+  // ── Live-Berechnungen Modul 1 ───────────────────────────────
+  const lsResult = useMemo(() => {
+    const ib = berechneIb(leistung, spannung, cosPhi, phasig);
+    const qs = fixedQs ?? manualQs;
+    const izBase = getIz(qs, verlegeart, material, isolation);
+    const f1 = getTempFaktor(temperatur, isolation);
+    const f2 = getHaeufungFaktor(haeufung);
+    const iz = izBase * f1 * f2;
+    const ok = ib <= inNenn && inNenn <= iz;
+    const fix = ok ? null : magicFixQuerschnitt(ib, verlegeart, material, isolation, temperatur, haeufung, inNenn);
+    return { ib, iz, izBase, f1, f2, qs, ok, fix };
+  }, [leistung, spannung, cosPhi, phasig, manualQs, fixedQs, verlegeart, material, isolation, temperatur, haeufung, inNenn]);
+
+  // ── Live-Berechnungen Modul 2 ───────────────────────────────
+  const sfResult = useMemo(() => {
+    const ib = berechneIb(leistung, spannung, cosPhi, phasig);
+    const qs = sfFixQs ?? sfQs;
+    const { deltaU, prozent } = berechneSpannungsfall(ib, sfLaenge, qs, material, phasig, spannung, cosPhi);
+    const ok = prozent <= sfGrenzwert;
+    const fix = ok ? null : magicFixQuerschnittSpannungsfall(ib, sfLaenge, material, phasig, spannung, cosPhi, sfGrenzwert);
+    return { ib, deltaU, prozent, qs, ok, fix };
+  }, [leistung, spannung, cosPhi, phasig, sfQs, sfFixQs, sfLaenge, sfGrenzwert, material]);
+
+  // ── Live-Berechnungen Modul 3 ───────────────────────────────
+  const abResult = useMemo(() => {
+    const faktor: Record<string, number> = { B: 5, C: 10, D: 20 };
+    const ia = lsIn * (faktor[lsTyp] ?? 5);
+    const zsZul = u0 / ia;
+    // Schleifenwiderstand aus Länge + Querschnitt berechnen (Hin- und Rückleiter)
+    const rho20 = abMat === "cu" ? 0.0178 : 0.0282;
+    const zsCalc = (2 * abLaenge * rho20) / abQs;
+    const zsGesamt = zsReal > 0 ? zsReal : zsCalc;
+    const ok = zsGesamt <= zsZul;
+    return { ia, zsZul, zsGesamt, ok };
+  }, [u0, lsTyp, lsIn, zsReal, abLaenge, abQs, abMat]);
+
+  // ───────────────────────────────────────────────────────────
   if (loadingPro) {
     return (
-      <DashboardLayout title="VDE-Rechner" subtitle="Pro-Feature">
+      <DashboardLayout title="VDE-Rechner" subtitle="Lade…">
         <div className="flex items-center justify-center py-24">
           <Loader size={24} className="animate-spin" style={{ color: "#00c6ff" }} />
         </div>
@@ -78,242 +326,371 @@ export default function VdeRechnerPage() {
           </div>
           <div className="text-center">
             <h2 className="text-xl font-bold mb-2" style={{ color: "#e6edf3", fontFamily: "var(--font-syne)" }}>VDE-Rechner — Pro-Feature</h2>
-            <p className="text-sm" style={{ color: "#8b9ab5" }}>Leitungsquerschnitt, Absicherung und Spannungsfall berechnen.</p>
+            <p className="text-sm" style={{ color: "#8b9ab5" }}>Leitungsschutz, Spannungsfall und Abschaltbedingungen nach VDE — live, reaktiv, mit Auto-Fix.</p>
           </div>
-          <button onClick={() => router.push("/upgrade")} className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all hover:opacity-90" style={{ background: "linear-gradient(135deg, #f5a623, #c4841c)", color: "#0d1b2e" }}>
-            <Zap size={16} /> Auf Pro upgraden — 9,99€/Monat
+          <button onClick={() => router.push("/upgrade")} className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all hover:opacity-90" style={{ background: "linear-gradient(135deg,#f5a623,#c4841c)", color: "#0d1b2e" }}>
+            <Zap size={16} /> Auf Pro upgraden
           </button>
         </div>
       </DashboardLayout>
     );
   }
 
-  const tabs: { id: Rechner; label: string }[] = [
-    { id: "querschnitt", label: "Leitungsquerschnitt" },
-    { id: "absicherung", label: "Absicherung" },
-    { id: "spannungsfall", label: "Spannungsfall" },
+  const tabs = [
+    { id: "leitungsschutz" as Tab, label: "① Leitungsschutz", color: "#00c6ff" },
+    { id: "spannungsfall"  as Tab, label: "② Spannungsfall",  color: "#22c55e" },
+    { id: "abschalt"       as Tab, label: "③ Abschaltbedingung", color: "#f5a623" },
   ];
 
-  const inputCls = "w-full px-3 py-2.5 rounded-xl text-sm outline-none transition-all";
-  const inputSty = { background: "#0d1b2e", border: "1px solid #1e3a5f", color: "#e6edf3" };
-
-  const selectIcon = <ChevronDown size={14} style={{ color: "#8b9ab5", position: "absolute" as const, right: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" as const }} />;
+  const card = { background: "#112240", border: "1px solid #1e3a5f", borderRadius: 16, padding: "1.5rem" };
 
   return (
-    <DashboardLayout title="VDE-Rechner" subtitle="Elektrotechnische Berechnungen nach VDE 0298">
+    <DashboardLayout title="VDE-Rechner" subtitle="Live-Berechnung nach VDE 0298-4 / VDE 0100-520 / VDE 0100-410">
+      {/* Disclaimer */}
+      <div className="mb-6 px-4 py-3 rounded-xl text-xs flex items-start gap-2" style={{ background: "#f5a62310", border: "1px solid #f5a62330", color: "#8b9ab5" }}>
+        <AlertTriangle size={13} style={{ color: "#f5a623", flexShrink: 0, marginTop: 1 }} />
+        <span>Haftungsausschluss: Diese Ergebnisse dienen der Orientierung. Für rechtssichere Planungen ist eine Fachkraft verantwortlich. ElektroGenius übernimmt keine Haftung.</span>
+      </div>
+
       {/* Tabs */}
       <div className="flex gap-2 mb-6 flex-wrap">
         {tabs.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setActive(t.id)}
-            className="px-4 py-2 rounded-xl text-sm font-medium transition-all"
+          <button key={t.id} onClick={() => setActiveTab(t.id)}
+            className="px-4 py-2.5 rounded-xl text-xs font-bold transition-all"
             style={{
-              background: active === t.id ? "#00c6ff18" : "#112240",
-              border: `1px solid ${active === t.id ? "#00c6ff44" : "#1e3a5f"}`,
-              color: active === t.id ? "#00c6ff" : "#8b9ab5",
-            }}
-          >
+              background: activeTab === t.id ? `${t.color}18` : "#112240",
+              border: `1px solid ${activeTab === t.id ? `${t.color}55` : "#1e3a5f"}`,
+              color: activeTab === t.id ? t.color : "#8b9ab5", minHeight: 48,
+            }}>
             {t.label}
           </button>
         ))}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-        {/* ── Querschnitt ── */}
-        {active === "querschnitt" && (
-          <>
-            <div className="rounded-xl p-6 space-y-4" style={{ background: "#112240", border: "1px solid #1e3a5f" }}>
-              <h2 className="text-sm font-bold flex items-center gap-2" style={{ color: "#e6edf3", fontFamily: "var(--font-syne)" }}>
-                <Calculator size={16} style={{ color: "#00c6ff" }} /> Leitungsquerschnitt berechnen
-              </h2>
-              <p className="text-xs" style={{ color: "#8b9ab5" }}>Berechnung nach VDE 0298 / IEC 60364-5-52 (max. 3% Spannungsfall)</p>
-              {[
-                { label: "Strom (A)", key: "strom", min: 0.1 },
-                { label: "Leitungslänge (m)", key: "laenge", min: 0.1 },
-                { label: "Nennspannung (V)", key: "spannung", min: 1 },
-              ].map((f) => (
-                <div key={f.key}>
-                  <label className="block text-xs font-medium mb-1" style={{ color: "#8b9ab5" }}>{f.label}</label>
-                  <input type="number" min={f.min} value={qs[f.key as keyof typeof qs]} onChange={(e) => setQs({ ...qs, [f.key]: parseFloat(e.target.value) || 0 })} className={inputCls} style={inputSty} />
-                </div>
-              ))}
-              <div>
-                <label className="block text-xs font-medium mb-1" style={{ color: "#8b9ab5" }}>Material</label>
-                <div className="relative">
-                  <select value={qs.material} onChange={(e) => setQs({ ...qs, material: e.target.value })} className={inputCls + " appearance-none pr-8"} style={inputSty}>
-                    <option value="cu">Kupfer (Cu)</option>
-                    <option value="al">Aluminium (Al)</option>
-                  </select>
-                  {selectIcon}
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-medium mb-1" style={{ color: "#8b9ab5" }}>System</label>
-                <div className="relative">
-                  <select value={qs.phasig} onChange={(e) => setQs({ ...qs, phasig: parseInt(e.target.value) })} className={inputCls + " appearance-none pr-8"} style={inputSty}>
-                    <option value={1}>Einphasig (230V AC)</option>
-                    <option value={3}>Dreiphasig (400V AC)</option>
-                  </select>
-                  {selectIcon}
-                </div>
-              </div>
-              <button onClick={() => setQsResult(berechneQuerschnitt(qs.strom, qs.laenge, qs.spannung, qs.material, qs.phasig))} className="w-full py-2.5 rounded-xl text-sm font-bold transition-all hover:opacity-90" style={{ background: "linear-gradient(135deg,#00c6ff,#0099cc)", color: "#0d1b2e" }}>
-                Berechnen
-              </button>
+      {/* ══ MODUL 1: LEITUNGSSCHUTZ ══ */}
+      {activeTab === "leitungsschutz" && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Eingaben */}
+          <div style={card} className="space-y-5">
+            <div>
+              <h3 className="text-sm font-bold mb-1" style={{ color: "#e6edf3", fontFamily: "var(--font-syne)" }}>Leitungsschutz nach VDE 0298-4</h3>
+              <p className="text-xs" style={{ color: "#4a6fa5" }}>Alle Felder reagieren live — kein Button nötig</p>
             </div>
-            {qsResult !== null && (
-              <div className="rounded-xl p-6 flex flex-col justify-center items-center gap-4" style={{ background: "#112240", border: "1px solid #00c6ff33" }}>
-                <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "#8b9ab5" }}>Mindest-Querschnitt</p>
-                <p className="text-5xl font-bold" style={{ color: "#00c6ff", fontFamily: "var(--font-syne)" }}>{qsResult} mm²</p>
-                <p className="text-xs text-center" style={{ color: "#8b9ab5" }}>Nächster Normwert nach DIN VDE 0298-4</p>
-                <div className="w-full p-3 rounded-lg" style={{ background: "#0d1b2e", border: "1px solid #1e3a5f" }}>
-                  <p className="text-xs" style={{ color: "#8b9ab5" }}>
-                    Empfehlung: {qs.material === "cu" ? "NYM-J" : "NAYY"}{" "}
-                    {qs.phasig === 3 ? `3x${qsResult}mm²` : `2x${qsResult}mm²`}
-                  </p>
-                </div>
+
+            <div>
+              <p className="text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>System</p>
+              <Seg options={[{ val: 1, label: "1-phasig 230V" }, { val: 3, label: "3-phasig 400V" }]}
+                value={phasig} onChange={(v: number) => { setPhasig(v); setSpannung(v === 3 ? 400 : 230); setFixedQs(null); }} />
+            </div>
+
+            <NumInput label="Bemessungsleistung" value={leistung} onChange={(v) => { setLeistung(v); setFixedQs(null); }} unit="W" step={100} />
+            <NumInput label="Leistungsfaktor cos φ" value={cosPhi} onChange={(v) => { setCosPhi(Math.min(1, Math.max(0.1, v))); setFixedQs(null); }} step={0.01} min={0.1} />
+
+            <div>
+              <p className="text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Leitermaterial</p>
+              <Seg options={[{ val: "cu", label: "Kupfer (Cu)" }, { val: "al", label: "Aluminium (Al)" }]}
+                value={material} onChange={(v) => { setMaterial(v); setFixedQs(null); }} />
+            </div>
+
+            <div>
+              <p className="text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Isolierung</p>
+              <Seg options={[{ val: "pvc", label: "PVC 70°C" }, { val: "xlpe", label: "XLPE 90°C" }]}
+                value={isolation} onChange={(v) => { setIsolation(v); setFixedQs(null); }} />
+            </div>
+
+            <SelectInput label="Verlegeart (VDE 0298-4)"
+              value={verlegeart}
+              onChange={(v: string) => { setVerlegeart(v); setFixedQs(null); }}
+              options={[
+                { val: "B1", label: "B1 — Einzelader in Rohr auf/in Wand" },
+                { val: "B2", label: "B2 — Mehradr. Kabel in Rohr auf/in Wand" },
+                { val: "C",  label: "C — Direkt auf Wand / Kabelkanal" },
+                { val: "E",  label: "E — Freie Luft / Kabelpritschen" },
+              ]}
+            />
+
+            <SelectInput label="Umgebungstemperatur"
+              value={temperatur}
+              onChange={(v: number) => { setTemperatur(Number(v)); setFixedQs(null); }}
+              options={[10,15,20,25,30,35,40,45,50].map((t) => ({ val: t, label: `${t} °C` }))}
+            />
+
+            <SelectInput label="Häufung (Anz. gebündelte Kabel)"
+              value={haeufung}
+              onChange={(v: number) => { setHaeufung(Number(v)); setFixedQs(null); }}
+              options={[1,2,3,4,5,6,7,8,9,10].map((n) => ({ val: n, label: `${n} Kabel (f₂ = ${getHaeufungFaktor(n)})` }))}
+            />
+
+            <SelectInput label="Querschnitt (manuell)"
+              value={fixedQs ?? manualQs}
+              onChange={(v: number) => { setManualQs(Number(v)); setFixedQs(null); }}
+              options={CROSS_SECTIONS.map((q) => ({ val: q, label: `${q} mm²` }))}
+            />
+
+            <SelectInput label="Absicherung In"
+              value={inNenn}
+              onChange={(v: number) => { setInNenn(Number(v)); setFixedQs(null); }}
+              options={LS_NORMEN.map((n) => ({ val: n, label: `${n} A` }))}
+            />
+          </div>
+
+          {/* Ergebnisse */}
+          <div className="space-y-4">
+            {/* Betriebsstrom */}
+            <div style={card}>
+              <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: "#4a6fa5" }}>Betriebsstrom Ib</p>
+              <p className="text-4xl font-bold" style={{ color: "#00c6ff", fontFamily: "var(--font-syne)" }}>
+                {lsResult.ib.toFixed(2)} A
+              </p>
+              <p className="text-xs mt-1" style={{ color: "#4a6fa5" }}>
+                {phasig === 3 ? `P / (√3 · ${spannung}V · ${cosPhi})` : `P / (${spannung}V · ${cosPhi})`}
+              </p>
+            </div>
+
+            {/* IZ mit Faktoren */}
+            <div style={card}>
+              <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: "#4a6fa5" }}>Strombelastbarkeit Iz</p>
+              <p className="text-4xl font-bold" style={{ color: "#e6edf3", fontFamily: "var(--font-syne)" }}>
+                {lsResult.iz.toFixed(1)} A
+              </p>
+              <div className="mt-3 space-y-1 text-xs" style={{ color: "#4a6fa5" }}>
+                <div className="flex justify-between"><span>Grundwert Ir ({lsResult.qs} mm², {verlegeart})</span><span>{lsResult.izBase.toFixed(1)} A</span></div>
+                <div className="flex justify-between"><span>Temperaturfaktor f₁ ({temperatur}°C)</span><span>× {lsResult.f1.toFixed(2)}</span></div>
+                <div className="flex justify-between"><span>Häufungsfaktor f₂ ({haeufung} Kabel)</span><span>× {lsResult.f2.toFixed(2)}</span></div>
+              </div>
+              <div className="mt-4">
+                <AuslastungsBar wert={lsResult.ib} max={lsResult.iz} einheit="A" />
+              </div>
+            </div>
+
+            {/* Validierung Ib ≤ In ≤ Iz */}
+            <div style={{ ...card, border: `1px solid ${lsResult.ok ? "#22c55e44" : "#ef444444"}` }}>
+              <div className="flex items-center gap-2 mb-3">
+                {lsResult.ok
+                  ? <CheckCircle size={16} style={{ color: "#22c55e" }} />
+                  : <AlertTriangle size={16} style={{ color: "#ef4444" }} />}
+                <p className="text-sm font-bold" style={{ color: lsResult.ok ? "#22c55e" : "#ef4444", fontFamily: "var(--font-syne)" }}>
+                  {lsResult.ok ? "VDE-Bedingung erfüllt ✓" : "VDE-Bedingung verletzt!"}
+                </p>
+              </div>
+              <p className="text-xs font-mono" style={{ color: "#8b9ab5" }}>
+                Ib ({lsResult.ib.toFixed(1)} A) ≤ In ({inNenn} A) ≤ Iz ({lsResult.iz.toFixed(1)} A)
+              </p>
+              <p className="text-xs mt-1" style={{ color: "#4a6fa5" }}>
+                Ib ≤ In: {lsResult.ib <= inNenn ? "✓" : "✗"}  |  In ≤ Iz: {inNenn <= lsResult.iz ? "✓" : "✗"}
+              </p>
+            </div>
+
+            {/* Magic Fix */}
+            {!lsResult.ok && lsResult.fix && (
+              <div style={{ ...card, background: "#f5a62310", border: "1px solid #f5a62330" }}>
+                <p className="text-xs mb-3" style={{ color: "#f5a623" }}>
+                  Querschnitt zu gering — min. {lsResult.fix} mm² für diese Bedingungen erforderlich.
+                </p>
+                <MagicFixBtn
+                  text={`Querschnitt auf ${lsResult.fix} mm² erhöhen`}
+                  onClick={() => setFixedQs(lsResult.fix!)}
+                />
               </div>
             )}
-          </>
-        )}
 
-        {/* ── Absicherung ── */}
-        {active === "absicherung" && (
-          <>
-            <div className="rounded-xl p-6 space-y-4" style={{ background: "#112240", border: "1px solid #1e3a5f" }}>
-              <h2 className="text-sm font-bold flex items-center gap-2" style={{ color: "#e6edf3", fontFamily: "var(--font-syne)" }}>
-                <Calculator size={16} style={{ color: "#f5a623" }} /> Absicherung berechnen
-              </h2>
-              <p className="text-xs" style={{ color: "#8b9ab5" }}>Belastbarkeit nach VDE 0298-4 (Cu, PVC-isoliert)</p>
-              <div>
-                <label className="block text-xs font-medium mb-1" style={{ color: "#8b9ab5" }}>Leitungsquerschnitt (mm²)</label>
-                <div className="relative">
-                  <select value={abs.querschnitt} onChange={(e) => setAbs({ ...abs, querschnitt: parseFloat(e.target.value) })} className={inputCls + " appearance-none pr-8"} style={inputSty}>
-                    {[1.5, 2.5, 4, 6, 10, 16, 25, 35, 50, 70, 95, 120].map((v) => (
-                      <option key={v} value={v}>{v} mm²</option>
-                    ))}
-                  </select>
-                  {selectIcon}
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-medium mb-1" style={{ color: "#8b9ab5" }}>Verlegeart</label>
-                <div className="relative">
-                  <select value={abs.verlegeart} onChange={(e) => setAbs({ ...abs, verlegeart: e.target.value })} className={inputCls + " appearance-none pr-8"} style={inputSty}>
-                    <option value="A">A — In Rohr in isolierter Wand</option>
-                    <option value="B">B — In Rohr auf Wand / in Schlitz</option>
-                    <option value="C">C — Direkt auf Wand / Kabelkanal</option>
-                  </select>
-                  {selectIcon}
-                </div>
-              </div>
-              <button onClick={() => setAbsResult(berechneAbsicherung(abs.querschnitt, abs.verlegeart))} className="w-full py-2.5 rounded-xl text-sm font-bold transition-all hover:opacity-90" style={{ background: "linear-gradient(135deg,#f5a623,#c4841c)", color: "#0d1b2e" }}>
-                Berechnen
-              </button>
-            </div>
-            {absResult !== null && (
-              <div className="rounded-xl p-6 flex flex-col justify-center items-center gap-4" style={{ background: "#112240", border: "1px solid #f5a62333" }}>
-                <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "#8b9ab5" }}>Max. Belastbarkeit</p>
-                <p className="text-5xl font-bold" style={{ color: "#f5a623", fontFamily: "var(--font-syne)" }}>{absResult} A</p>
-                <p className="text-xs text-center" style={{ color: "#8b9ab5" }}>
-                  Empfohlene Absicherung: LS-Schalter oder Schmelzsicherung ≤ {absResult} A
-                </p>
-                <div className="w-full p-3 rounded-lg" style={{ background: "#0d1b2e", border: "1px solid #1e3a5f" }}>
-                  <div className="flex items-start gap-2">
-                    <AlertCircle size={13} style={{ color: "#f5a623", flexShrink: 0, marginTop: 1 }} />
-                    <p className="text-xs" style={{ color: "#8b9ab5" }}>
-                      Reduktionsfaktoren bei Häufung (VDE 0298-4 Tab. B.52.17) nicht berücksichtigt.
-                    </p>
-                  </div>
-                </div>
+            {fixedQs && (
+              <div className="flex items-center gap-2 text-xs px-3 py-2 rounded-xl" style={{ background: "#22c55e10", border: "1px solid #22c55e30", color: "#22c55e" }}>
+                <ThumbsUp size={13} />
+                Auto-Fix aktiv: {fixedQs} mm² gewählt
+                <button onClick={() => setFixedQs(null)} className="ml-auto text-xs underline" style={{ color: "#4a6fa5" }}>Zurücksetzen</button>
               </div>
             )}
-          </>
-        )}
 
-        {/* ── Spannungsfall ── */}
-        {active === "spannungsfall" && (
-          <>
-            <div className="rounded-xl p-6 space-y-4" style={{ background: "#112240", border: "1px solid #1e3a5f" }}>
-              <h2 className="text-sm font-bold flex items-center gap-2" style={{ color: "#e6edf3", fontFamily: "var(--font-syne)" }}>
-                <Calculator size={16} style={{ color: "#22c55e" }} /> Spannungsfall berechnen
-              </h2>
-              <p className="text-xs" style={{ color: "#8b9ab5" }}>ΔU = (√3 bzw. 2) · ρ · l · I / A — max. 3% nach VDE 0100-520</p>
-              {[
-                { label: "Strom (A)", key: "strom" },
-                { label: "Leitungslänge (m)", key: "laenge" },
-                { label: "Nennspannung (V)", key: "spannung" },
-              ].map((f) => (
-                <div key={f.key}>
-                  <label className="block text-xs font-medium mb-1" style={{ color: "#8b9ab5" }}>{f.label}</label>
-                  <input type="number" min={0.1} value={sf[f.key as keyof typeof sf]} onChange={(e) => setSf({ ...sf, [f.key]: parseFloat(e.target.value) || 0 })} className={inputCls} style={inputSty} />
-                </div>
-              ))}
-              <div>
-                <label className="block text-xs font-medium mb-1" style={{ color: "#8b9ab5" }}>Querschnitt (mm²)</label>
-                <div className="relative">
-                  <select value={sf.querschnitt} onChange={(e) => setSf({ ...sf, querschnitt: parseFloat(e.target.value) })} className={inputCls + " appearance-none pr-8"} style={inputSty}>
-                    {[1.5, 2.5, 4, 6, 10, 16, 25, 35, 50, 70, 95, 120].map((v) => (
-                      <option key={v} value={v}>{v} mm²</option>
-                    ))}
-                  </select>
-                  {selectIcon}
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-medium mb-1" style={{ color: "#8b9ab5" }}>Material</label>
-                <div className="relative">
-                  <select value={sf.material} onChange={(e) => setSf({ ...sf, material: e.target.value })} className={inputCls + " appearance-none pr-8"} style={inputSty}>
-                    <option value="cu">Kupfer (Cu)</option>
-                    <option value="al">Aluminium (Al)</option>
-                  </select>
-                  {selectIcon}
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-medium mb-1" style={{ color: "#8b9ab5" }}>System</label>
-                <div className="relative">
-                  <select value={sf.phasig} onChange={(e) => setSf({ ...sf, phasig: parseInt(e.target.value) })} className={inputCls + " appearance-none pr-8"} style={inputSty}>
-                    <option value={1}>Einphasig</option>
-                    <option value={3}>Dreiphasig</option>
-                  </select>
-                  {selectIcon}
-                </div>
-              </div>
-              <button onClick={() => setSfResult(berechneSpannungsfall(sf.strom, sf.laenge, sf.querschnitt, sf.material, sf.phasig, sf.spannung))} className="w-full py-2.5 rounded-xl text-sm font-bold transition-all hover:opacity-90" style={{ background: "linear-gradient(135deg,#22c55e,#16a34a)", color: "#fff" }}>
-                Berechnen
-              </button>
+            {/* Kabelempfehlung */}
+            <div style={card}>
+              <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "#4a6fa5" }}>Kabelempfehlung</p>
+              <p className="text-sm font-bold" style={{ color: "#e6edf3" }}>
+                {material === "cu" ? "NYM-J" : "NAYY"}{" "}
+                {phasig === 3 ? `3x${lsResult.qs}` : `2x${lsResult.qs}`} mm²
+              </p>
+              <p className="text-xs mt-1" style={{ color: "#4a6fa5" }}>LS-Schalter ≤ {inNenn} A</p>
             </div>
-            {sfResult !== null && (
-              <div className="rounded-xl p-6 flex flex-col justify-center items-center gap-4" style={{ background: "#112240", border: `1px solid ${sfResult.prozent > 3 ? "#ef444433" : "#22c55e33"}` }}>
-                <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "#8b9ab5" }}>Spannungsfall</p>
-                <p className="text-5xl font-bold" style={{ color: sfResult.prozent > 3 ? "#ef4444" : "#22c55e", fontFamily: "var(--font-syne)" }}>
-                  {sfResult.prozent.toFixed(2)} %
+          </div>
+        </div>
+      )}
+
+      {/* ══ MODUL 2: SPANNUNGSFALL ══ */}
+      {activeTab === "spannungsfall" && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div style={card} className="space-y-5">
+            <div>
+              <h3 className="text-sm font-bold mb-1" style={{ color: "#e6edf3", fontFamily: "var(--font-syne)" }}>Spannungsfall nach VDE 0100-520</h3>
+              <p className="text-xs" style={{ color: "#4a6fa5" }}>Betriebsstrom aus Modul 1 übernommen</p>
+            </div>
+
+            <div className="px-3 py-2 rounded-xl text-xs" style={{ background: "#0d1b2e", border: "1px solid #1e3a5f", color: "#4a6fa5" }}>
+              Ib = {sfResult.ib.toFixed(2)} A (aus Modul 1: {leistung} W, {phasig === 3 ? "3~" : "1~"}, cos φ {cosPhi})
+            </div>
+
+            <NumInput label="Leitungslänge" value={sfLaenge} onChange={(v) => { setSfLaenge(v); setSfFixQs(null); }} unit="m" />
+
+            <SelectInput label="Querschnitt"
+              value={sfFixQs ?? sfQs}
+              onChange={(v: number) => { setSfQs(Number(v)); setSfFixQs(null); }}
+              options={CROSS_SECTIONS.map((q) => ({ val: q, label: `${q} mm²` }))}
+            />
+
+            <SelectInput label="Grenzwert ΔU"
+              value={sfGrenzwert}
+              onChange={(v: number) => { setSfGrenzwert(Number(v)); setSfFixQs(null); }}
+              options={[
+                { val: 3, label: "3 % — Hausinstallation, Beleuchtung" },
+                { val: 4, label: "4 % — allgemein (VDE 0100-520)" },
+                { val: 5, label: "5 % — Motoren, industrie" },
+              ]}
+            />
+
+            <div className="px-3 py-2 rounded-xl text-xs space-y-1" style={{ background: "#0d1b2e", border: "1px solid #1e3a5f", color: "#4a6fa5" }}>
+              <div>κ (Leitfähigkeit): {material === "cu" ? "56 m/Ω·mm²" : "35 m/Ω·mm²"} ({material === "cu" ? "Kupfer" : "Aluminium"})</div>
+              <div>Formel: ΔU = {phasig === 3 ? "√3" : "2"} · L · Ib · cos φ / (κ · A)</div>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div style={card}>
+              <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: "#4a6fa5" }}>Spannungsfall</p>
+              <p className="text-4xl font-bold" style={{ color: sfResult.prozent > sfGrenzwert ? "#ef4444" : "#22c55e", fontFamily: "var(--font-syne)" }}>
+                {sfResult.prozent.toFixed(2)} %
+              </p>
+              <p className="text-sm mt-1" style={{ color: "#8b9ab5" }}>= {sfResult.deltaU.toFixed(3)} V</p>
+              <div className="mt-4">
+                <AuslastungsBar wert={sfResult.prozent} max={sfGrenzwert} einheit="%" grenzWarnPct={0.8} />
+              </div>
+            </div>
+
+            <div style={{ ...card, border: `1px solid ${sfResult.ok ? "#22c55e44" : "#ef444444"}` }}>
+              <div className="flex items-center gap-2 mb-2">
+                {sfResult.ok
+                  ? <CheckCircle size={16} style={{ color: "#22c55e" }} />
+                  : <AlertTriangle size={16} style={{ color: "#ef4444" }} />}
+                <p className="text-sm font-bold" style={{ color: sfResult.ok ? "#22c55e" : "#ef4444" }}>
+                  {sfResult.ok ? `ΔU ≤ ${sfGrenzwert}% — Norm erfüllt ✓` : `ΔU > ${sfGrenzwert}% — Grenzwert überschritten!`}
                 </p>
-                <p className="text-sm font-medium" style={{ color: sfResult.prozent > 3 ? "#ef4444" : "#22c55e" }}>
-                  = {sfResult.volt.toFixed(2)} V
+              </div>
+              <p className="text-xs" style={{ color: "#4a6fa5" }}>
+                {sfResult.prozent.toFixed(2)}% von max. {sfGrenzwert}%
+              </p>
+            </div>
+
+            {!sfResult.ok && sfResult.fix && (
+              <div style={{ ...card, background: "#f5a62310", border: "1px solid #f5a62330" }}>
+                <p className="text-xs mb-3" style={{ color: "#f5a623" }}>
+                  Querschnitt zu gering für {sfLaenge} m Leitungslänge.
                 </p>
-                <div className="w-full p-3 rounded-lg" style={{ background: "#0d1b2e", border: "1px solid #1e3a5f" }}>
-                  {sfResult.prozent > 3 ? (
-                    <div className="flex items-start gap-2">
-                      <AlertCircle size={13} style={{ color: "#ef4444", flexShrink: 0, marginTop: 1 }} />
-                      <p className="text-xs" style={{ color: "#ef4444" }}>
-                        Grenzwert 3% überschritten! Größeren Querschnitt oder kürzere Leitung wählen.
-                      </p>
-                    </div>
-                  ) : (
-                    <p className="text-xs text-center" style={{ color: "#22c55e" }}>
-                      ✓ Innerhalb des zulässigen Grenzwerts (max. 3%)
-                    </p>
-                  )}
-                </div>
+                <MagicFixBtn
+                  text={`Querschnitt auf ${sfResult.fix} mm² erhöhen`}
+                  onClick={() => setSfFixQs(sfResult.fix!)}
+                />
               </div>
             )}
-          </>
-        )}
-      </div>
+
+            {sfFixQs && (
+              <div className="flex items-center gap-2 text-xs px-3 py-2 rounded-xl" style={{ background: "#22c55e10", border: "1px solid #22c55e30", color: "#22c55e" }}>
+                <ThumbsUp size={13} />
+                Auto-Fix aktiv: {sfFixQs} mm² gewählt
+                <button onClick={() => setSfFixQs(null)} className="ml-auto text-xs underline" style={{ color: "#4a6fa5" }}>Zurücksetzen</button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ══ MODUL 3: ABSCHALTBEDINGUNG ══ */}
+      {activeTab === "abschalt" && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div style={card} className="space-y-5">
+            <div>
+              <h3 className="text-sm font-bold mb-1" style={{ color: "#e6edf3", fontFamily: "var(--font-syne)" }}>Abschaltbedingung nach VDE 0100-410</h3>
+              <p className="text-xs" style={{ color: "#4a6fa5" }}>Personenschutz — Abschaltung in ≤ 0,4 s</p>
+            </div>
+
+            <NumInput label="Nennspannung gegen Erde U₀" value={u0} onChange={setU0} unit="V" />
+
+            <div>
+              <p className="text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>LS-Schalter Charakteristik</p>
+              <Seg options={[{ val: "B", label: "Typ B (×5)" }, { val: "C", label: "Typ C (×10)" }, { val: "D", label: "Typ D (×20)" }]}
+                value={lsTyp} onChange={setLsTyp} />
+            </div>
+
+            <SelectInput label="Nennstrom In"
+              value={lsIn}
+              onChange={(v: number) => setLsIn(Number(v))}
+              options={LS_NORMEN.map((n) => ({ val: n, label: `${n} A` }))}
+            />
+
+            <div className="border-t pt-4" style={{ borderColor: "#1e3a5f" }}>
+              <p className="text-xs font-semibold mb-3" style={{ color: "#8b9ab5" }}>Schleifenwiderstand berechnen</p>
+              <div className="space-y-3">
+                <NumInput label="Leitungslänge" value={abLaenge} onChange={setAbLaenge} unit="m" />
+                <SelectInput label="Querschnitt" value={abQs} onChange={(v: number) => setAbQs(Number(v))}
+                  options={CROSS_SECTIONS.map((q) => ({ val: q, label: `${q} mm²` }))} />
+                <div>
+                  <p className="text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Leitermaterial</p>
+                  <Seg options={[{ val: "cu", label: "Cu" }, { val: "al", label: "Al" }]}
+                    value={abMat} onChange={setAbMat} />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div style={card}>
+              <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: "#4a6fa5" }}>Auslösestrom Ia</p>
+              <p className="text-4xl font-bold" style={{ color: "#f5a623", fontFamily: "var(--font-syne)" }}>
+                {abResult.ia} A
+              </p>
+              <p className="text-xs mt-1" style={{ color: "#4a6fa5" }}>
+                Typ {lsTyp}: In × {lsTyp === "B" ? 5 : lsTyp === "C" ? 10 : 20} = {lsIn} × {lsTyp === "B" ? 5 : lsTyp === "C" ? 10 : 20}
+              </p>
+            </div>
+
+            <div style={card}>
+              <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: "#4a6fa5" }}>Schleifenwiderstände</p>
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs" style={{ color: "#8b9ab5" }}>Zulässig Zs,zul = U₀ / Ia</span>
+                  <span className="text-sm font-bold" style={{ color: "#22c55e" }}>{abResult.zsZul.toFixed(3)} Ω</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs" style={{ color: "#8b9ab5" }}>Berechnet Zs (2·L·ρ/A)</span>
+                  <span className="text-sm font-bold" style={{ color: "#e6edf3" }}>{abResult.zsGesamt.toFixed(3)} Ω</span>
+                </div>
+              </div>
+              <div className="mt-4">
+                <AuslastungsBar wert={abResult.zsGesamt} max={abResult.zsZul} einheit="Ω" />
+              </div>
+            </div>
+
+            <div style={{ ...card, border: `1px solid ${abResult.ok ? "#22c55e44" : "#ef444444"}` }}>
+              <div className="flex items-center gap-2 mb-2">
+                {abResult.ok
+                  ? <CheckCircle size={16} style={{ color: "#22c55e" }} />
+                  : <AlertTriangle size={16} style={{ color: "#ef4444" }} />}
+                <p className="text-sm font-bold" style={{ color: abResult.ok ? "#22c55e" : "#ef4444" }}>
+                  {abResult.ok ? "Abschaltbedingung erfüllt ✓" : "Abschaltbedingung NICHT erfüllt!"}
+                </p>
+              </div>
+              <p className="text-xs font-mono" style={{ color: "#8b9ab5" }}>
+                Zs ({abResult.zsGesamt.toFixed(3)} Ω) {abResult.ok ? "≤" : ">"} Zs,zul ({abResult.zsZul.toFixed(3)} Ω)
+              </p>
+              {!abResult.ok && (
+                <div className="mt-3 space-y-2">
+                  <p className="text-xs" style={{ color: "#f5a623" }}>Maßnahmen:</p>
+                  <p className="text-xs" style={{ color: "#8b9ab5" }}>→ Querschnitt erhöhen (senkt Zs)</p>
+                  <p className="text-xs" style={{ color: "#8b9ab5" }}>→ Leitungslänge reduzieren</p>
+                  {lsTyp === "C" && <p className="text-xs" style={{ color: "#8b9ab5" }}>→ LS-Typ B statt C verwenden (Ia halbiert sich)</p>}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </DashboardLayout>
   );
 }
