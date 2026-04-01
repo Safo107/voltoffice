@@ -1,4 +1,9 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/context/AuthContext";
 import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
 import MobileNav from "./MobileNav";
@@ -10,6 +15,21 @@ interface DashboardLayoutProps {
 }
 
 export default function DashboardLayout({ children, title, subtitle }: DashboardLayoutProps) {
+  const { user, loading } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!loading && !user) router.replace("/");
+  }, [user, loading, router]);
+
+  if (loading || !user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: "#0d1b2e" }}>
+        <div className="w-8 h-8 rounded-full border-2 animate-spin" style={{ borderColor: "#00c6ff", borderTopColor: "transparent" }} />
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full" style={{ background: "#0d1b2e" }}>
       <Sidebar />

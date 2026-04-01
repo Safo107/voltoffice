@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Bell, Search, ChevronDown, User, Settings, LogOut, Info, X } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/context/AuthContext";
 
 interface TopbarProps {
   title: string;
@@ -17,6 +18,7 @@ const notifications = [
 
 export default function Topbar({ title, subtitle }: TopbarProps) {
   const router = useRouter();
+  const { user, logout } = useAuth();
   const [bellOpen, setBellOpen] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
   const bellRef = useRef<HTMLDivElement>(null);
@@ -30,6 +32,14 @@ export default function Topbar({ title, subtitle }: TopbarProps) {
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
+
+  const handleLogout = async () => {
+    await logout();
+    router.replace("/");
+  };
+
+  const displayName = user?.displayName || user?.email?.split("@")[0] || "Mein Betrieb";
+  const displayEmail = user?.email || "";
 
   return (
     <header
@@ -164,7 +174,7 @@ export default function Topbar({ title, subtitle }: TopbarProps) {
             >
               <User size={14} style={{ color: "#00c6ff" }} />
             </div>
-            <span className="hidden sm:inline text-sm font-medium" style={{ color: "#e6edf3" }}>Mein Betrieb</span>
+            <span className="hidden sm:inline text-sm font-medium" style={{ color: "#e6edf3" }}>{displayName}</span>
             <ChevronDown
               size={14}
               style={{
@@ -181,8 +191,8 @@ export default function Topbar({ title, subtitle }: TopbarProps) {
               style={{ background: "#1a2f50", border: "1px solid #1e3a5f", boxShadow: "0 12px 32px rgba(0,0,0,0.5)" }}
             >
               <div className="px-4 py-2.5 mb-1" style={{ borderBottom: "1px solid #1e3a5f" }}>
-                <p className="text-xs font-semibold" style={{ color: "#e6edf3" }}>Musterbetrieb GmbH</p>
-                <p className="text-xs" style={{ color: "#8b9ab5" }}>max@musterbetrieb.de</p>
+                <p className="text-xs font-semibold truncate" style={{ color: "#e6edf3" }}>{displayName}</p>
+                <p className="text-xs truncate" style={{ color: "#8b9ab5" }}>{displayEmail}</p>
               </div>
               <button
                 onClick={() => { router.push("/einstellungen"); setUserOpen(false); }}
@@ -205,6 +215,7 @@ export default function Topbar({ title, subtitle }: TopbarProps) {
               </button>
               <div style={{ borderTop: "1px solid #1e3a5f", marginTop: "4px" }}>
                 <button
+                  onClick={handleLogout}
                   className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm transition-all"
                   style={{ color: "#ef4444" }}
                   onMouseEnter={(e) => { e.currentTarget.style.background = "#ef444418"; }}
