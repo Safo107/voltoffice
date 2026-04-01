@@ -192,6 +192,15 @@ export default function RechnungenPage() {
     URL.revokeObjectURL(url);
   };
 
+  const downloadRapport = async (id: string, number: string) => {
+    const res = await fetch(`/api/rechnungen/${id}/rapport`);
+    if (!res.ok) return alert("Rapport-Fehler");
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = `Rapport-${number}.pdf`; a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const filtered = rechnungen.filter((r) =>
     r.customerName?.toLowerCase().includes(search.toLowerCase()) ||
     r.number?.toLowerCase().includes(search.toLowerCase())
@@ -268,7 +277,8 @@ export default function RechnungenPage() {
                   {menuOpen === String(r._id) && (
                     <div className="absolute right-0 top-8 z-50 rounded-xl py-1 min-w-48 shadow-xl" style={{ background: "#0d1b2e", border: "1px solid #1e3a5f" }}>
                       <button onClick={() => { openEdit(r); setMenuOpen(null); }} className="flex items-center gap-2 w-full px-4 py-2 text-sm hover:bg-white/5" style={{ color: "#e6edf3" }}><Edit size={13} /> Bearbeiten</button>
-                      <button onClick={() => { downloadPdf(String(r._id), r.number); setMenuOpen(null); }} className="flex items-center gap-2 w-full px-4 py-2 text-sm hover:bg-white/5" style={{ color: "#00c6ff" }}><FileDown size={13} /> PDF herunterladen</button>
+                      <button onClick={() => { downloadPdf(String(r._id), r.number); setMenuOpen(null); }} className="flex items-center gap-2 w-full px-4 py-2 text-sm hover:bg-white/5" style={{ color: "#00c6ff" }}><FileDown size={13} /> Rechnung PDF</button>
+                      <button onClick={() => { downloadRapport(String(r._id), r.number); setMenuOpen(null); }} className="flex items-center gap-2 w-full px-4 py-2 text-sm hover:bg-white/5" style={{ color: "#22c55e" }}><FileDown size={13} /> Leistungsnachweis PDF</button>
                       {r.status === "offen" && <button onClick={() => { updateStatus(String(r._id), "bezahlt"); setMenuOpen(null); }} className="flex items-center gap-2 w-full px-4 py-2 text-sm hover:bg-white/5" style={{ color: "#22c55e" }}>Als bezahlt markieren</button>}
                       <button onClick={() => { deleteRechnung(String(r._id)); setMenuOpen(null); }} className="flex items-center gap-2 w-full px-4 py-2 text-sm hover:bg-white/5" style={{ color: "#ef4444" }}><Trash2 size={13} /> Löschen</button>
                     </div>
