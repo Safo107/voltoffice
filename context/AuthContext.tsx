@@ -41,13 +41,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await signInWithEmailAndPassword(auth, email, password);
   };
 
-  const loginWithGoogle = async () => {
-    const provider = new GoogleAuthProvider();
-    await signInWithPopup(auth, provider);
+  const register = async (email: string, password: string) => {
+    const cred = await createUserWithEmailAndPassword(auth, email, password);
+    // 14-Tage Trial für neuen Nutzer initialisieren
+    try {
+      await fetch("/api/user/init", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uid: cred.user.uid, email }),
+      });
+    } catch {
+      // Trial-Init im Hintergrund — kein blocking Error
+    }
   };
 
-  const register = async (email: string, password: string) => {
-    await createUserWithEmailAndPassword(auth, email, password);
+  const loginWithGoogle = async () => {
+    const provider = new GoogleAuthProvider();
+    const cred = await signInWithPopup(auth, provider);
+    // Trial für neue Google-Nutzer initialisieren (ignoriert wenn bereits vorhanden)
+    try {
+      await fetch("/api/user/init", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uid: cred.user.uid, email: cred.user.email }),
+      });
+    } catch {
+      //
+    }
   };
 
   const resetPassword = async (email: string) => {

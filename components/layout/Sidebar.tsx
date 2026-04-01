@@ -36,7 +36,9 @@ const proItems: NavItem[] = [
 export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const { isPro } = usePro();
+  const { isPro, isTrial, trialDaysLeft, tier } = usePro();
+
+  const trialUrgent = isTrial && trialDaysLeft <= 3;
 
   return (
     <aside
@@ -57,7 +59,7 @@ export default function Sidebar() {
           </p>
           <p className="text-xs" style={{ color: "#8b9ab5" }}>ElektroGenius</p>
         </div>
-        {isPro && (
+        {tier === "pro" && (
           <span
             className="ml-auto text-xs font-bold px-1.5 py-0.5 rounded"
             style={{ background: "rgba(245,166,35,0.2)", color: "#f5a623", border: "1px solid rgba(245,166,35,0.4)" }}
@@ -65,12 +67,22 @@ export default function Sidebar() {
             PRO
           </span>
         )}
+        {isTrial && (
+          <span
+            className="ml-auto text-xs font-bold px-1.5 py-0.5 rounded"
+            style={{
+              background: trialUrgent ? "rgba(239,68,68,0.2)" : "rgba(0,198,255,0.15)",
+              color: trialUrgent ? "#ef4444" : "#00c6ff",
+              border: `1px solid ${trialUrgent ? "rgba(239,68,68,0.4)" : "rgba(0,198,255,0.35)"}`,
+            }}
+          >
+            TRIAL
+          </span>
+        )}
       </div>
 
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto px-3 py-4">
-
-        {/* Free Items */}
         <div className="space-y-0.5">
           {freeItems.map((item) => {
             const active = pathname === item.href;
@@ -110,8 +122,8 @@ export default function Sidebar() {
         {/* Pro Section */}
         <div className="mt-6">
           <div className="flex items-center gap-2 px-3 mb-2">
-            {isPro && <Crown size={12} style={{ color: "#f5a623" }} />}
-            <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: isPro ? "#f5a623" : "#8b9ab5" }}>
+            {tier === "pro" && <Crown size={12} style={{ color: "#f5a623" }} />}
+            <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: tier === "pro" ? "#f5a623" : "#8b9ab5" }}>
               Pro Features
             </span>
           </div>
@@ -166,8 +178,38 @@ export default function Sidebar() {
         </div>
       </nav>
 
-      {/* Banner — nur wenn kein Pro */}
-      {!isPro && (
+      {/* Trial Banner */}
+      {isTrial && (
+        <div className="px-3 pb-3">
+          <div
+            className="rounded-xl p-3"
+            style={{
+              background: trialUrgent ? "rgba(239,68,68,0.08)" : "rgba(0,198,255,0.08)",
+              border: `1px solid ${trialUrgent ? "rgba(239,68,68,0.3)" : "rgba(0,198,255,0.25)"}`,
+            }}
+          >
+            <div className="flex items-center gap-2 mb-1">
+              <Zap size={14} style={{ color: trialUrgent ? "#ef4444" : "#00c6ff" }} />
+              <span className="text-xs font-bold" style={{ color: trialUrgent ? "#ef4444" : "#00c6ff", fontFamily: "var(--font-syne)" }}>
+                {trialDaysLeft === 0 ? "Trial endet heute!" : `Noch ${trialDaysLeft} Trial-${trialDaysLeft === 1 ? "Tag" : "Tage"}`}
+              </span>
+            </div>
+            <p className="text-xs mb-2" style={{ color: "#8b9ab5" }}>
+              {trialUrgent ? "Jetzt upgraden und alle Features behalten." : "Alle Pro-Features kostenlos testen."}
+            </p>
+            <button
+              onClick={() => router.push("/upgrade")}
+              className="w-full py-1.5 rounded-lg text-xs font-semibold transition-all hover:opacity-90"
+              style={{ background: "linear-gradient(135deg, #f5a623, #c4841c)", color: "#0d1b2e" }}
+            >
+              Pro — 9,99€/Monat
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Upgrade Banner — nur wenn kein Pro und kein Trial */}
+      {!isPro && !isTrial && (
         <div className="px-3 pb-3">
           <div
             className="rounded-xl p-3"

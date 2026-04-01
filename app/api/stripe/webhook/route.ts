@@ -42,6 +42,7 @@ export async function POST(req: NextRequest) {
           {
             $set: {
               pro: true,
+              subscriptionTier: "pro",
               proSince: new Date(),
               stripeSubscriptionId: session.subscription as string,
             },
@@ -59,7 +60,7 @@ export async function POST(req: NextRequest) {
       if (uid) {
         await db.collection("users").updateOne(
           { uid },
-          { $set: { pro: false, proSince: null, stripeSubscriptionId: null } }
+          { $set: { pro: false, subscriptionTier: "free", proSince: null, stripeSubscriptionId: null } }
         );
         console.log(`❌ Pro deaktiviert für uid=${uid}`);
       }
@@ -73,7 +74,7 @@ export async function POST(req: NextRequest) {
       if (uid) {
         await db.collection("users").updateOne(
           { uid },
-          { $set: { pro: isActive } }
+          { $set: { pro: isActive, subscriptionTier: isActive ? "pro" : "free" } }
         );
       }
       break;
