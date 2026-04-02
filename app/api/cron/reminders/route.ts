@@ -70,7 +70,29 @@ export async function GET(req: NextRequest) {
         );
       }
 
-      // ── 2. Nicht versendete Angebote (Draft, älter als 3 Tage) ───────────────
+      // ── 2. Bald fällige Rechnungen (in 2 Tagen) ─────────────────────────────
+      const in2Days = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000).toISOString();
+      const soonInvoices = await db.collection("rechnungen").find({
+        userId: uid,
+        status: { $nin: ["bezahlt", "storniert"] },
+        dueDate: { $gte: nowIso, $lte: in2Days },
+      }).toArray();
+
+      for (const inv of soonInvoices) {
+        await upsertNotification(
+          uid,
+          "payment_reminder",
+          String(inv._id),
+          "rechnung",
+          "Rechnung bald fällig",
+          `Rechnung #${inv.number || inv._id} (${(inv.total || 0).toLocaleString("de-DE")} €) wird am ${
+            inv.dueDate ? new Date(inv.dueDate).toLocaleDateString("de-DE") : "?"
+          } fällig.`,
+          "warning"
+        );
+      }
+
+      // ── 3. Nicht versendete Angebote (Draft, älter als 3 Tage) ───────────────
       const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000).toISOString();
       const unsentOffers = await db.collection("angebote").find({
         userId: uid,
