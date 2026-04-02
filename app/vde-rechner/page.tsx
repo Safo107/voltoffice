@@ -11,8 +11,9 @@ import {
 import {
   CROSS_SECTIONS, LS_NORMEN, HAEUFUNG_FAKTOREN,
   getIz, getTempFaktor, getHaeufungFaktor,
-  berechneIb, berechneSpannungsfall,
+  berechneIb, berechneSpannungsfall, berechneKurzschlussstrom,
   magicFixQuerschnitt, magicFixSpannungsfall as magicFixQuerschnittSpannungsfall,
+  type Cores,
 } from "@/lib/vde-tables";
 
 // ═══════════════════════════════════════════════════════════════
@@ -132,7 +133,7 @@ function MagicFixBtn({ text, onClick }: { text: string; onClick: () => void }) {
 //  HAUPTKOMPONENTE
 // ═══════════════════════════════════════════════════════════════
 
-type Tab = "leitungsschutz" | "spannungsfall" | "abschalt";
+type Tab = "leitungsschutz" | "spannungsfall" | "abschalt" | "kurzschluss";
 
 export default function VdeRechnerPage() {
   const { isPro, loadingPro } = usePro();
@@ -159,6 +160,9 @@ export default function VdeRechnerPage() {
   const [sfFixQs, setSfFixQs] = useState<number | null>(null);
   const [sfGrenzwert, setSfGrenzwert] = useState<number>(3);
 
+  // ── Belastete Leiter (cores) ────────────────────────────────
+  const [belasteteLeiter, setBelasteteLeiter] = useState<Cores>(3);
+
   // ── Modul 3: Abschaltbedingung ──────────────────────────────
   const [u0, setU0] = useState<number>(230);
   const [lsTyp, setLsTyp] = useState<string>("B");
@@ -168,18 +172,27 @@ export default function VdeRechnerPage() {
   const [abQs, setAbQs] = useState<number>(2.5);
   const [abMat, setAbMat] = useState<string>("cu");
 
+  // ── Modul 4: Kurzschlussstrom ───────────────────────────────
+  const [kkPhasig, setKkPhasig] = useState<number>(3);
+  const [kkSn, setKkSn] = useState<number>(250);
+  const [kkUk, setKkUk] = useState<number>(4);
+  const [kkLaenge, setKkLaenge] = useState<number>(50);
+  const [kkQs, setKkQs] = useState<number>(16);
+  const [kkMat, setKkMat] = useState<string>("cu");
+  const [kkIcn, setKkIcn] = useState<number>(10);
+
   // ── Live-Berechnungen Modul 1 ───────────────────────────────
   const lsResult = useMemo(() => {
     const ib = berechneIb(leistung, spannung, cosPhi, phasig);
     const qs = fixedQs ?? manualQs;
-    const izBase = getIz(qs, verlegeart, material, isolation);
+    const izBase = getIz(qs, verlegeart, material, isolation, belasteteLeiter);
     const f1 = getTempFaktor(temperatur, isolation);
     const f2 = getHaeufungFaktor(haeufung);
     const iz = izBase * f1 * f2;
     const ok = ib <= inNenn && inNenn <= iz;
-    const fix = ok ? null : magicFixQuerschnitt(ib, verlegeart, material, isolation, temperatur, haeufung, inNenn);
+    const fix = ok ? null : magicFixQuerschnitt(ib, verlegeart, material, isolation, temperatur, haeufung, inNenn, belasteteLeiter);
     return { ib, iz, izBase, f1, f2, qs, ok, fix };
-  }, [leistung, spannung, cosPhi, phasig, manualQs, fixedQs, verlegeart, material, isolation, temperatur, haeufung, inNenn]);
+  }, [leistung, spannung, cosPhi, phasig, manualQs, fixedQs, verlegeart, material, isolation, temperatur, haeufung, inNenn, belasteteLeiter]);
 
   // ── Live-Berechnungen Modul 2 ───────────────────────────────
   const sfResult = useMemo(() => {
@@ -203,6 +216,12 @@ export default function VdeRechnerPage() {
     const ok = zsGesamt <= zsZul;
     return { ia, zsZul, zsGesamt, ok };
   }, [u0, lsTyp, lsIn, zsReal, abLaenge, abQs, abMat]);
+
+  // ── Live-Berechnungen Modul 4 ───────────────────────────────
+  const kkResult = useMemo(() => {
+    const un = kkPhasig === 3 ? 400 : 230;
+    return berechneKurzschlussstrom(un, kkSn, kkUk, kkLaenge, kkQs, kkMat, kkPhasig);
+  }, [kkPhasig, kkSn, kkUk, kkLaenge, kkQs, kkMat]);
 
   // ───────────────────────────────────────────────────────────
   if (loadingPro) {
@@ -235,9 +254,10 @@ export default function VdeRechnerPage() {
   }
 
   const tabs = [
-    { id: "leitungsschutz" as Tab, label: "① Leitungsschutz", color: "#00c6ff" },
-    { id: "spannungsfall"  as Tab, label: "② Spannungsfall",  color: "#22c55e" },
+    { id: "leitungsschutz" as Tab, label: "① Leitungsschutz",    color: "#00c6ff" },
+    { id: "spannungsfall"  as Tab, label: "② Spannungsfall",     color: "#22c55e" },
     { id: "abschalt"       as Tab, label: "③ Abschaltbedingung", color: "#f5a623" },
+    { id: "kurzschluss"    as Tab, label: "④ Kurzschlussstrom",  color: "#a78bfa" },
   ];
 
   const card = { background: "#112240", border: "1px solid #1e3a5f", borderRadius: 16, padding: "1.5rem" };
@@ -300,12 +320,23 @@ export default function VdeRechnerPage() {
               value={verlegeart}
               onChange={(v: string) => { setVerlegeart(v); setFixedQs(null); }}
               options={[
+                { val: "A1", label: "A1 — Einzelader in thermisch isolierter Wand" },
+                { val: "A2", label: "A2 — Mehradr. Kabel in thermisch isolierter Wand" },
                 { val: "B1", label: "B1 — Einzelader in Rohr auf/in Wand" },
                 { val: "B2", label: "B2 — Mehradr. Kabel in Rohr auf/in Wand" },
                 { val: "C",  label: "C — Direkt auf Wand / Kabelkanal" },
                 { val: "E",  label: "E — Freie Luft / Kabelpritschen" },
               ]}
             />
+
+            <div>
+              <p className="text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Belastete Leiter</p>
+              <Seg
+                options={[{ val: 2, label: "2 Leiter (1-phasig)" }, { val: 3, label: "3 Leiter (3-phasig)" }]}
+                value={belasteteLeiter}
+                onChange={(v: number) => { setBelasteteLeiter(v as Cores); setFixedQs(null); }}
+              />
+            </div>
 
             <SelectInput label="Umgebungstemperatur"
               value={temperatur}
@@ -495,6 +526,116 @@ export default function VdeRechnerPage() {
                 <button onClick={() => setSfFixQs(null)} className="ml-auto text-xs underline" style={{ color: "#4a6fa5" }}>Zurücksetzen</button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ══ MODUL 4: KURZSCHLUSSSTROM ══ */}
+      {activeTab === "kurzschluss" && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div style={card} className="space-y-5">
+            <div>
+              <h3 className="text-sm font-bold mb-1" style={{ color: "#e6edf3", fontFamily: "var(--font-syne)" }}>Kurzschlussstrom nach VDE 0102 / IEC 60909</h3>
+              <p className="text-xs" style={{ color: "#4a6fa5" }}>Prospektiver Kurzschlussstrom Ik'' am Kabelende</p>
+            </div>
+
+            <div>
+              <p className="text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Netz / System</p>
+              <Seg options={[{ val: 3, label: "3-phasig 400 V" }, { val: 1, label: "1-phasig 230 V" }]}
+                value={kkPhasig} onChange={(v: number) => setKkPhasig(v)} />
+            </div>
+
+            <NumInput label="Trafoleistung Sn" value={kkSn} onChange={setKkSn} unit="kVA" step={25} min={25} />
+            <NumInput label="Kurzschlussspannung uk" value={kkUk} onChange={setKkUk} unit="%" step={0.5} min={1} />
+
+            <div className="border-t pt-4" style={{ borderColor: "#1e3a5f" }}>
+              <p className="text-xs font-semibold mb-3" style={{ color: "#8b9ab5" }}>Kabelstrecke</p>
+              <div className="space-y-3">
+                <NumInput label="Kabellänge" value={kkLaenge} onChange={setKkLaenge} unit="m" />
+                <SelectInput label="Querschnitt" value={kkQs} onChange={(v: number) => setKkQs(Number(v))}
+                  options={CROSS_SECTIONS.map((q) => ({ val: q, label: `${q} mm²` }))} />
+                <div>
+                  <p className="text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Leitermaterial</p>
+                  <Seg options={[{ val: "cu", label: "Cu" }, { val: "al", label: "Al" }]}
+                    value={kkMat} onChange={setKkMat} />
+                </div>
+              </div>
+            </div>
+
+            <NumInput label="Ausschaltvermögen LS-Schalter Icn" value={kkIcn} onChange={setKkIcn} unit="kA" step={1} min={1} />
+
+            <div className="px-3 py-2 rounded-xl text-xs space-y-1" style={{ background: "#0d1b2e", border: "1px solid #1e3a5f", color: "#4a6fa5" }}>
+              <div>Zk,Trafo = (uk / 100) · Un² / Sn</div>
+              <div>Zk,Kabel = √(R² + X²), X ≈ 0,08 mΩ/m</div>
+              <div>Ik'' = c · U₀ / Zges (c=1,1 max / c=0,95 min)</div>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            {/* Impedanzen */}
+            <div style={card}>
+              <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: "#4a6fa5" }}>Impedanzen</p>
+              <div className="space-y-2">
+                {[
+                  ["Trafo Zk", (kkResult.zTrafo * 1000).toFixed(2) + " mΩ"],
+                  ["Kabel Zl", (kkResult.zKabel * 1000).toFixed(2) + " mΩ"],
+                  ["Gesamt Zges", (kkResult.zGes * 1000).toFixed(2) + " mΩ"],
+                ].map(([label, val]) => (
+                  <div key={label} className="flex justify-between items-center">
+                    <span className="text-xs" style={{ color: "#8b9ab5" }}>{label}</span>
+                    <span className="text-sm font-bold" style={{ color: "#e6edf3" }}>{val}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Ik am Trafo */}
+            <div style={card}>
+              <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: "#4a6fa5" }}>Ik'' direkt am Trafo</p>
+              <p className="text-3xl font-bold" style={{ color: "#a78bfa", fontFamily: "var(--font-syne)" }}>
+                {kkResult.ikMaxTrafo.toFixed(2)} kA
+              </p>
+            </div>
+
+            {/* Ik am Kabelende */}
+            <div style={card}>
+              <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: "#4a6fa5" }}>Ik'' am Kabelende ({kkLaenge} m)</p>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs" style={{ color: "#8b9ab5" }}>Ik'' max (c=1,1)</span>
+                  <span className="text-2xl font-bold" style={{ color: "#a78bfa", fontFamily: "var(--font-syne)" }}>{kkResult.ikMax.toFixed(2)} kA</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs" style={{ color: "#8b9ab5" }}>Ik'' min (c=0,95)</span>
+                  <span className="text-lg font-bold" style={{ color: "#e6edf3" }}>{kkResult.ikMin.toFixed(2)} kA</span>
+                </div>
+              </div>
+              <div className="mt-4">
+                <AuslastungsBar wert={kkResult.ikMax} max={kkIcn} einheit="kA" grenzWarnPct={0.8} />
+              </div>
+            </div>
+
+            {/* LS-Schalter Eignung */}
+            <div style={{ ...card, border: `1px solid ${kkResult.ikMax <= kkIcn ? "#22c55e44" : "#ef444444"}` }}>
+              <div className="flex items-center gap-2 mb-2">
+                {kkResult.ikMax <= kkIcn
+                  ? <CheckCircle size={16} style={{ color: "#22c55e" }} />
+                  : <AlertTriangle size={16} style={{ color: "#ef4444" }} />}
+                <p className="text-sm font-bold" style={{ color: kkResult.ikMax <= kkIcn ? "#22c55e" : "#ef4444" }}>
+                  {kkResult.ikMax <= kkIcn
+                    ? `LS-Schalter ${kkIcn} kA geeignet ✓`
+                    : `LS-Schalter ${kkIcn} kA NICHT ausreichend!`}
+                </p>
+              </div>
+              <p className="text-xs font-mono" style={{ color: "#8b9ab5" }}>
+                Ik'' ({kkResult.ikMax.toFixed(2)} kA) {kkResult.ikMax <= kkIcn ? "≤" : ">"} Icn ({kkIcn} kA)
+              </p>
+              {kkResult.ikMax > kkIcn && (
+                <p className="text-xs mt-2" style={{ color: "#ef4444" }}>
+                  → LS-Schalter mit Icn ≥ {Math.ceil(kkResult.ikMax)} kA verwenden
+                </p>
+              )}
+            </div>
           </div>
         </div>
       )}

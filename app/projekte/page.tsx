@@ -6,7 +6,8 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 import Modal from "@/components/ui/Modal";
 import EmptyState from "@/components/ui/EmptyState";
 import { usePro } from "@/context/ProContext";
-import { Briefcase, Plus, Search, MoreVertical, Calendar, User, Loader, AlertCircle, Trash2, Edit } from "lucide-react";
+import { Briefcase, Plus, Search, MoreVertical, Calendar, User, AlertCircle, Trash2, Edit } from "lucide-react";
+import SkeletonCard from "@/components/ui/SkeletonCard";
 
 interface Project {
   _id?: string;
@@ -157,8 +158,8 @@ export default function ProjektePage() {
       )}
 
       {loading ? (
-        <div className="flex items-center justify-center py-20">
-          <Loader size={24} className="animate-spin" style={{ color: "#00c6ff" }} />
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {[...Array(3)].map((_, i) => <SkeletonCard key={i} />)}
         </div>
       ) : filtered.length === 0 ? (
         <EmptyState icon={<Briefcase size={32} />} title="Noch keine Projekte"
@@ -247,6 +248,44 @@ export default function ProjektePage() {
 
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editProjekt ? "Projekt bearbeiten" : "Neues Projekt"}>
         <form onSubmit={handleSave} className="space-y-4">
+          {/* Templates — nur bei neuem Projekt */}
+          {!editProjekt && (
+            <div>
+              <p className="text-xs font-medium mb-2" style={{ color: "#8b9ab5" }}>Vorlage wählen</p>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  {
+                    label: "EFH Standard",
+                    icon: "🏠",
+                    data: { title: "EFH Neuinstallation", description: "Elektroinstallation Einfamilienhaus nach VDE 0100-520, 3-phasig 400V" },
+                  },
+                  {
+                    label: "Wohnanlage",
+                    icon: "🏢",
+                    data: { title: "Wohnanlage", description: "Mehrfamilienhaus Neuinstallation, inkl. PV-Vorbereitung und E-Mobilität" },
+                  },
+                  {
+                    label: "Industrie",
+                    icon: "⚙️",
+                    data: { title: "Industrieanlage", description: "Industrieinstallation, Schaltschrankbau nach VDE 0100-700, Steuertechnik" },
+                  },
+                ].map((t) => (
+                  <button
+                    key={t.label}
+                    type="button"
+                    onClick={() => setForm((f) => ({ ...f, ...t.data }))}
+                    className="flex flex-col items-center gap-1 py-2.5 px-2 rounded-xl text-xs font-medium transition-all"
+                    style={{ background: "#0d1b2e", border: "1px solid #1e3a5f", color: "#8b9ab5" }}
+                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#00c6ff44"; e.currentTarget.style.color = "#00c6ff"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; e.currentTarget.style.color = "#8b9ab5"; }}
+                  >
+                    <span className="text-lg">{t.icon}</span>
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <div>
             <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Projekttitel *</label>
             <input required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })}
