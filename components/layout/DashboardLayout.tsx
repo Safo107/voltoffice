@@ -19,7 +19,7 @@ interface DashboardLayoutProps {
 
 export default function DashboardLayout({ children, title, subtitle }: DashboardLayoutProps) {
   const { user, loading } = useAuth();
-  const { isTrial, trialDaysLeft, tier } = usePro();
+  const { isTrial, trialDaysLeft, tier, proSince } = usePro();
   const router = useRouter();
   const [bannerDismissed, setBannerDismissed] = useState(false);
 
@@ -83,25 +83,27 @@ export default function DashboardLayout({ children, title, subtitle }: Dashboard
           </div>
         )}
 
-        {/* Trial Expired Banner */}
+        {/* Free / Expired Banner */}
         {showExpiredBanner && (
           <div
             className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm shrink-0"
             style={{ background: "rgba(245,166,35,0.1)", borderBottom: "1px solid rgba(245,166,35,0.25)" }}
           >
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 min-w-0">
               <Zap size={14} style={{ color: "#f5a623", flexShrink: 0 }} />
-              <span style={{ color: "#f5a623", fontWeight: 600 }}>
-                Trial abgelaufen — Du bist jetzt im Free-Plan (max. 5 Kunden, 3 Angebote, 3 Projekte)
+              <span className="truncate" style={{ color: "#f5a623", fontWeight: 600 }}>
+                {proSince
+                  ? "Trial abgelaufen — Du nutzt den Free-Plan (max. 5 Kunden, 3 Angebote)"
+                  : "Du nutzt die Free-Version. Teste jetzt MaterialCheck+ 7 Tage kostenlos — unbegrenzte Projekte & Team-Features."}
               </span>
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <button
                 onClick={() => router.push("/upgrade")}
-                className="px-3 py-1 rounded-lg text-xs font-bold transition-all hover:opacity-90"
+                className="px-3 py-1 rounded-lg text-xs font-bold transition-all hover:opacity-90 whitespace-nowrap"
                 style={{ background: "linear-gradient(135deg, #f5a623, #c4841c)", color: "#0d1b2e" }}
               >
-                Jetzt upgraden — ab 19,99€
+                {proSince ? "Jetzt upgraden" : "14 Tage kostenlos testen"}
               </button>
               <button
                 onClick={() => setBannerDismissed(true)}

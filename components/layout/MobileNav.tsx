@@ -2,14 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Users, FileText, Briefcase, Clock } from "lucide-react";
+import { LayoutDashboard, Users, FileText, Briefcase, Settings } from "lucide-react";
 
 const items = [
   { label: "Dashboard", href: "/dashboard", icon: <LayoutDashboard size={20} /> },
   { label: "Kunden", href: "/kunden", icon: <Users size={20} /> },
   { label: "Angebote", href: "/angebote", icon: <FileText size={20} /> },
   { label: "Projekte", href: "/projekte", icon: <Briefcase size={20} /> },
-  { label: "Zeit", href: "/zeiterfassung", icon: <Clock size={20} /> },
+  { label: "Einstellungen", href: "/einstellungen", icon: <Settings size={20} /> },
 ];
 
 export default function MobileNav() {

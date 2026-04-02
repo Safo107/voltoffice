@@ -831,15 +831,31 @@ export default function EinstellungenPage() {
                     </div>
                     {(tier === "pro" || tier === "business" || isTrial) && (
                       <div className="flex flex-col items-end gap-2 shrink-0">
-                        <button
-                          onClick={openPortal}
-                          disabled={portalLoading || !hasStripeCustomer}
-                          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all hover:opacity-90 disabled:opacity-50"
-                          style={{ background: "linear-gradient(135deg, #00c6ff, #0099cc)", color: "#0d1b2e" }}
-                        >
-                          {portalLoading ? <Loader size={14} className="animate-spin" /> : <CreditCard size={14} />}
-                          {portalLoading ? "Wird geöffnet…" : "Abo verwalten"}
-                        </button>
+                        {hasStripeCustomer ? (
+                          <button
+                            onClick={openPortal}
+                            disabled={portalLoading}
+                            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all hover:opacity-90 disabled:opacity-50"
+                            style={{ background: "linear-gradient(135deg, #00c6ff, #0099cc)", color: "#0d1b2e" }}
+                          >
+                            {portalLoading ? <Loader size={14} className="animate-spin" /> : <CreditCard size={14} />}
+                            {portalLoading ? "Wird geöffnet…" : "Abo verwalten"}
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => router.push("/upgrade")}
+                            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all hover:opacity-90"
+                            style={{ background: "linear-gradient(135deg, #f5a623, #c4841c)", color: "#0d1b2e" }}
+                          >
+                            <Zap size={14} />
+                            Jetzt abonnieren
+                          </button>
+                        )}
+                        {!hasStripeCustomer && (
+                          <p className="text-xs max-w-[180px] text-right" style={{ color: "#8b9ab5" }}>
+                            Einmalig abonnieren, um das Kundenportal freizuschalten.
+                          </p>
+                        )}
                         {portalError && (
                           <div className="flex items-start gap-2 rounded-lg px-3 py-2 text-xs max-w-xs text-right" style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", color: "#ef4444" }}>
                             <AlertCircle size={13} className="shrink-0 mt-0.5" />
