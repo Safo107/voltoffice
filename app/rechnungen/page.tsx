@@ -335,32 +335,28 @@ export default function RechnungenPage() {
                 <label className="text-xs font-medium" style={{ color: "#8b9ab5" }}>Positionen</label>
                 <button onClick={() => setItems((p) => [...p, { ...EMPTY_ITEM }])} className="text-xs px-2 py-1 rounded-lg" style={{ background: "#00c6ff18", color: "#00c6ff", border: "1px solid #00c6ff33" }}>+ Position</button>
               </div>
-              {/* Header */}
-              <div className="grid grid-cols-12 gap-1 mb-1 px-1">
-                {["Beschreibung", "Typ", "Menge", "Einheit", "EP (€)", "Gesamt", ""].map((h, i) => (
-                  <span key={i} className={`text-xs font-medium ${[4, 5, 3, 2, 1, 1, 0][i] === 0 ? "col-span-1" : ""}`} style={{ color: "#8b9ab5", gridColumn: ["span 4", "span 2", "span 1", "span 1", "span 2", "span 1", "span 1"][i] }}>
-                    {h}
-                  </span>
-                ))}
-              </div>
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                 {items.map((item, idx) => (
-                  <div key={idx} className="grid gap-1" style={{ display: "grid", gridTemplateColumns: "4fr 2fr 1fr 1.5fr 2fr 1.5fr 1fr" }}>
-                    <input value={item.beschreibung} onChange={(e) => updateItem(idx, "beschreibung", e.target.value)} placeholder="Beschreibung" className="px-2 py-1.5 rounded-lg text-xs outline-none" style={inputSty} />
-                    <select value={item.typ} onChange={(e) => updateItem(idx, "typ", e.target.value)} className="px-2 py-1.5 rounded-lg text-xs outline-none" style={inputSty}>
-                      <option value="material">Material</option>
-                      <option value="lohn">Lohn</option>
-                      <option value="sonstiges">Sonstiges</option>
-                    </select>
-                    <input type="number" value={item.menge} onChange={(e) => updateItem(idx, "menge", parseFloat(e.target.value) || 0)} className="px-2 py-1.5 rounded-lg text-xs outline-none text-center" style={inputSty} />
-                    <select value={item.einheit} onChange={(e) => updateItem(idx, "einheit", e.target.value)} className="px-2 py-1.5 rounded-lg text-xs outline-none" style={inputSty}>
-                      {getEinheiten(item.typ).map((e) => <option key={e} value={e}>{e}</option>)}
-                    </select>
-                    <input type="number" value={item.einzelpreis} onChange={(e) => updateItem(idx, "einzelpreis", parseFloat(e.target.value) || 0)} placeholder="0,00" className="px-2 py-1.5 rounded-lg text-xs outline-none" style={inputSty} />
-                    <div className="px-2 py-1.5 rounded-lg text-xs font-bold flex items-center" style={{ background: "#112240", color: "#00c6ff", border: "1px solid #1e3a5f" }}>
-                      {item.gesamt.toFixed(2)} €
+                  <div key={idx} className="rounded-xl p-2.5 space-y-1.5" style={{ background: "#0d1b2e", border: "1px solid #1e3a5f" }}>
+                    <div className="flex gap-2">
+                      <input value={item.beschreibung} onChange={(e) => updateItem(idx, "beschreibung", e.target.value)} placeholder="Beschreibung" className="flex-1 px-2 py-1.5 rounded-lg text-xs outline-none" style={inputSty} />
+                      <select value={item.typ} onChange={(e) => updateItem(idx, "typ", e.target.value)} className="px-2 py-1.5 rounded-lg text-xs outline-none" style={inputSty}>
+                        <option value="material">Material</option>
+                        <option value="lohn">Lohn</option>
+                        <option value="sonstiges">Sonstiges</option>
+                      </select>
                     </div>
-                    <button onClick={() => setItems((p) => p.filter((_, i) => i !== idx))} className="rounded-lg text-xs" style={{ color: "#ef4444", border: "1px solid #ef444433", background: "#ef444411" }}>✕</button>
+                    <div className="flex gap-2 items-center">
+                      <input type="number" value={item.menge} onChange={(e) => updateItem(idx, "menge", parseFloat(e.target.value) || 0)} className="w-16 px-2 py-1.5 rounded-lg text-xs outline-none text-center" style={inputSty} />
+                      <select value={item.einheit} onChange={(e) => updateItem(idx, "einheit", e.target.value)} className="px-2 py-1.5 rounded-lg text-xs outline-none" style={inputSty}>
+                        {getEinheiten(item.typ).map((e) => <option key={e} value={e}>{e}</option>)}
+                      </select>
+                      <input type="number" value={item.einzelpreis} onChange={(e) => updateItem(idx, "einzelpreis", parseFloat(e.target.value) || 0)} placeholder="EP €" className="flex-1 px-2 py-1.5 rounded-lg text-xs outline-none" style={inputSty} />
+                      <div className="text-xs font-bold px-2 py-1.5 rounded-lg whitespace-nowrap" style={{ background: "#112240", color: "#00c6ff", border: "1px solid #1e3a5f", minWidth: 56 }}>
+                        {item.gesamt.toFixed(2)} €
+                      </div>
+                      <button onClick={() => setItems((p) => p.filter((_, i) => i !== idx))} className="px-2 py-1.5 rounded-lg text-xs" style={{ color: "#ef4444", border: "1px solid #ef444433", background: "#ef444411" }}>✕</button>
+                    </div>
                   </div>
                 ))}
               </div>

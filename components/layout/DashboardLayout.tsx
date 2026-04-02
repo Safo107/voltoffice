@@ -40,9 +40,9 @@ export default function DashboardLayout({ children, title, subtitle }: Dashboard
   const trialUrgent = isTrial && trialDaysLeft <= 3;
 
   return (
-    <div className="flex h-full" style={{ background: "#0d1b2e" }}>
+    <div className="flex h-full" style={{ background: "#0d1b2e", overflow: "hidden", maxWidth: "100vw" }}>
       <Sidebar />
-      <div className="flex flex-col flex-1 overflow-hidden">
+      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         <Topbar title={title} subtitle={subtitle} />
 
         {/* Trial Banner */}

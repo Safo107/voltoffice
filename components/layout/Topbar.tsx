@@ -43,7 +43,7 @@ export default function Topbar({ title, subtitle }: TopbarProps) {
 
   return (
     <header
-      className="flex items-center justify-between px-6 py-4 shrink-0"
+      className="flex items-center justify-between px-4 md:px-6 py-4 shrink-0"
       style={{ background: "#112240", borderBottom: "1px solid #1e3a5f", height: "64px" }}
     >
       {/* Title */}

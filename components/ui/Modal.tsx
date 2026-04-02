@@ -29,11 +29,12 @@ export default function Modal({ open, onClose, title, children, maxWidth = "480p
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div
-        className="w-full rounded-2xl p-6 relative"
+        className="w-full rounded-2xl p-5 md:p-6 relative overflow-y-auto"
         style={{
           background: "#112240",
           border: "1px solid #1e3a5f",
           maxWidth,
+          maxHeight: "90dvh",
           boxShadow: "0 25px 60px rgba(0,0,0,0.5)",
         }}
       >

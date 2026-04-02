@@ -239,8 +239,9 @@ export default function AngebotePage() {
         />
       ) : (
         <div className="rounded-xl" style={{ border: "1px solid #1e3a5f" }}>
+          {/* Desktop table header */}
           <div
-            className="grid grid-cols-12 px-4 py-3 text-xs font-semibold uppercase tracking-wider rounded-t-xl"
+            className="hidden md:grid grid-cols-12 px-4 py-3 text-xs font-semibold uppercase tracking-wider rounded-t-xl"
             style={{ background: "#112240", color: "#8b9ab5", borderBottom: "1px solid #1e3a5f" }}
           >
             <div className="col-span-2">Nr.</div>
@@ -254,82 +255,97 @@ export default function AngebotePage() {
           {filtered.map((angebot, i) => {
             const id = angebot._id || String(i);
             const sc = statusConfig[angebot.status] || statusConfig.draft;
+            const rowBg = i % 2 === 0 ? "#0d1b2e" : "#112240";
+            const isLast = i === filtered.length - 1;
+            const dropdown = menuOpen === id && (
+              <div className="absolute right-0 top-8 rounded-xl py-1 z-20 min-w-36"
+                style={{ background: "#1a2f50", border: "1px solid #1e3a5f", boxShadow: "0 8px 24px rgba(0,0,0,0.4)" }}>
+                <button onClick={() => handleSend(angebot)}
+                  className="flex items-center gap-2 w-full px-4 py-2 text-sm transition-all"
+                  style={{ color: angebot.status === "sent" ? "#8b9ab5" : "#e6edf3" }}
+                  disabled={angebot.status === "sent"}
+                  onMouseEnter={(e) => { if (angebot.status !== "sent") e.currentTarget.style.background = "#1e3a5f"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
+                  <Send size={13} /> {angebot.status === "sent" ? "Bereits versendet" : "Als versendet markieren"}
+                </button>
+                <button onClick={() => openEdit(angebot)}
+                  className="flex items-center gap-2 w-full px-4 py-2 text-sm transition-all"
+                  style={{ color: "#e6edf3" }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = "#1e3a5f"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
+                  <Edit size={13} /> Bearbeiten
+                </button>
+                <button onClick={() => handleDelete(angebot)}
+                  className="flex items-center gap-2 w-full px-4 py-2 text-sm transition-all"
+                  style={{ color: "#ef4444" }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = "#ef444418"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
+                  <Trash2 size={13} /> Löschen
+                </button>
+              </div>
+            );
+            const menuBtnEl = (
+              <div className="relative flex justify-end">
+                <button onClick={(e) => { e.stopPropagation(); setMenuOpen(menuOpen === id ? null : id); }}
+                  className="p-1.5 rounded-lg transition-all" style={{ color: "#8b9ab5" }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = "#1e3a5f"; e.currentTarget.style.color = "#e6edf3"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#8b9ab5"; }}>
+                  <MoreVertical size={15} />
+                </button>
+                {dropdown}
+              </div>
+            );
             return (
-              <div
-                key={id}
-                className="grid grid-cols-12 px-4 py-4 items-center transition-all"
-                style={{
-                  background: i % 2 === 0 ? "#0d1b2e" : "#112240",
-                  borderBottom: i < filtered.length - 1 ? "1px solid #1e3a5f44" : "none",
-                  ...(i === filtered.length - 1 ? { borderRadius: "0 0 0.75rem 0.75rem" } : {}),
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = "#00c6ff08"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = i % 2 === 0 ? "#0d1b2e" : "#112240"; }}
-              >
-                <div className="col-span-2">
-                  <p className="text-sm font-mono font-medium" style={{ color: "#00c6ff" }}>#{angebot.number}</p>
-                </div>
-                <div className="col-span-3">
-                  <p className="text-sm font-medium" style={{ color: "#e6edf3" }}>{angebot.customerName}</p>
-                </div>
-                <div className="col-span-2">
-                  <span className="text-xs px-2 py-1 rounded-full" style={{ background: `${sc.color}22`, color: sc.color, border: `1px solid ${sc.color}44` }}>
-                    {sc.label}
-                  </span>
-                </div>
-                <div className="col-span-2">
-                  <p className="text-sm font-semibold" style={{ color: "#e6edf3" }}>
-                    {(angebot.total || 0).toLocaleString("de-DE")} €
-                  </p>
-                </div>
-                <div className="col-span-2">
-                  <p className="text-xs" style={{ color: "#8b9ab5" }}>
-                    {angebot.validUntil ? new Date(angebot.validUntil).toLocaleDateString("de-DE") : "—"}
-                  </p>
-                </div>
-                <div className="col-span-1 flex justify-end relative">
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setMenuOpen(menuOpen === id ? null : id); }}
-                    className="p-1.5 rounded-lg transition-all"
-                    style={{ color: "#8b9ab5" }}
-                    onMouseEnter={(e) => { e.currentTarget.style.background = "#1e3a5f"; e.currentTarget.style.color = "#e6edf3"; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#8b9ab5"; }}
-                  >
-                    <MoreVertical size={15} />
-                  </button>
-                  {menuOpen === id && (
-                    <div className="absolute right-0 top-8 rounded-xl py-1 z-20 min-w-36"
-                      style={{ background: "#1a2f50", border: "1px solid #1e3a5f", boxShadow: "0 8px 24px rgba(0,0,0,0.4)" }}>
-                      <button
-                        onClick={() => handleSend(angebot)}
-                        className="flex items-center gap-2 w-full px-4 py-2 text-sm transition-all"
-                        style={{ color: angebot.status === "sent" ? "#8b9ab5" : "#e6edf3" }}
-                        disabled={angebot.status === "sent"}
-                        onMouseEnter={(e) => { if (angebot.status !== "sent") e.currentTarget.style.background = "#1e3a5f"; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
-                      >
-                        <Send size={13} /> {angebot.status === "sent" ? "Bereits versendet" : "Als versendet markieren"}
-                      </button>
-                      <button
-                        onClick={() => openEdit(angebot)}
-                        className="flex items-center gap-2 w-full px-4 py-2 text-sm transition-all"
-                        style={{ color: "#e6edf3" }}
-                        onMouseEnter={(e) => { e.currentTarget.style.background = "#1e3a5f"; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
-                      >
-                        <Edit size={13} /> Bearbeiten
-                      </button>
-                      <button
-                        onClick={() => handleDelete(angebot)}
-                        className="flex items-center gap-2 w-full px-4 py-2 text-sm transition-all"
-                        style={{ color: "#ef4444" }}
-                        onMouseEnter={(e) => { e.currentTarget.style.background = "#ef444418"; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
-                      >
-                        <Trash2 size={13} /> Löschen
-                      </button>
+              <div key={id}>
+                {/* Mobile card */}
+                <div className="md:hidden px-4 py-4 transition-all"
+                  style={{ background: rowBg, borderBottom: isLast ? "none" : "1px solid #1e3a5f44", ...(isLast ? { borderRadius: "0 0 .75rem .75rem" } : {}) }}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <p className="text-sm font-mono font-medium" style={{ color: "#00c6ff" }}>#{angebot.number}</p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: `${sc.color}22`, color: sc.color, border: `1px solid ${sc.color}44` }}>
+                        {sc.label}
+                      </span>
+                      {menuBtnEl}
                     </div>
-                  )}
+                  </div>
+                  <p className="text-sm font-medium mb-1 truncate" style={{ color: "#e6edf3" }}>{angebot.customerName}</p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold" style={{ color: "#e6edf3" }}>
+                      {(angebot.total || 0).toLocaleString("de-DE")} €
+                    </p>
+                    <p className="text-xs" style={{ color: "#8b9ab5" }}>
+                      {angebot.validUntil ? new Date(angebot.validUntil).toLocaleDateString("de-DE") : "—"}
+                    </p>
+                  </div>
+                </div>
+                {/* Desktop table row */}
+                <div className="hidden md:grid grid-cols-12 px-4 py-4 items-center transition-all"
+                  style={{ background: rowBg, borderBottom: isLast ? "none" : "1px solid #1e3a5f44", ...(isLast ? { borderRadius: "0 0 .75rem .75rem" } : {}) }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = "#00c6ff08"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = rowBg; }}>
+                  <div className="col-span-2">
+                    <p className="text-sm font-mono font-medium" style={{ color: "#00c6ff" }}>#{angebot.number}</p>
+                  </div>
+                  <div className="col-span-3">
+                    <p className="text-sm font-medium truncate" style={{ color: "#e6edf3" }}>{angebot.customerName}</p>
+                  </div>
+                  <div className="col-span-2">
+                    <span className="text-xs px-2 py-1 rounded-full" style={{ background: `${sc.color}22`, color: sc.color, border: `1px solid ${sc.color}44` }}>
+                      {sc.label}
+                    </span>
+                  </div>
+                  <div className="col-span-2">
+                    <p className="text-sm font-semibold" style={{ color: "#e6edf3" }}>
+                      {(angebot.total || 0).toLocaleString("de-DE")} €
+                    </p>
+                  </div>
+                  <div className="col-span-2">
+                    <p className="text-xs" style={{ color: "#8b9ab5" }}>
+                      {angebot.validUntil ? new Date(angebot.validUntil).toLocaleDateString("de-DE") : "—"}
+                    </p>
+                  </div>
+                  <div className="col-span-1">{menuBtnEl}</div>
                 </div>
               </div>
             );
@@ -382,32 +398,35 @@ export default function AngebotePage() {
             </div>
             <div className="space-y-2">
               {items.map((item, i) => (
-                <div key={i} className="grid grid-cols-12 gap-2 items-center">
+                <div key={i} className="space-y-1.5">
                   <input
                     value={item.description}
                     onChange={(e) => updateItem(i, "description", e.target.value)}
                     placeholder="Beschreibung"
-                    className="col-span-5 px-3 py-2 rounded-lg text-xs outline-none"
+                    className="w-full px-3 py-2 rounded-lg text-xs outline-none"
                     style={{ background: "#0d1b2e", border: "1px solid #1e3a5f", color: "#e6edf3" }}
                   />
-                  <input
-                    type="number"
-                    value={item.quantity}
-                    onChange={(e) => updateItem(i, "quantity", Number(e.target.value))}
-                    className="col-span-2 px-3 py-2 rounded-lg text-xs outline-none"
-                    style={{ background: "#0d1b2e", border: "1px solid #1e3a5f", color: "#e6edf3" }}
-                  />
-                  <input
-                    type="number"
-                    value={item.unitPrice}
-                    onChange={(e) => updateItem(i, "unitPrice", Number(e.target.value))}
-                    placeholder="€/Stk."
-                    className="col-span-3 px-3 py-2 rounded-lg text-xs outline-none"
-                    style={{ background: "#0d1b2e", border: "1px solid #1e3a5f", color: "#e6edf3" }}
-                  />
-                  <p className="col-span-2 text-xs text-right font-semibold" style={{ color: "#00c6ff" }}>
-                    {item.total.toFixed(2)} €
-                  </p>
+                  <div className="flex gap-2 items-center">
+                    <input
+                      type="number"
+                      value={item.quantity}
+                      onChange={(e) => updateItem(i, "quantity", Number(e.target.value))}
+                      placeholder="Menge"
+                      className="flex-1 px-3 py-2 rounded-lg text-xs outline-none"
+                      style={{ background: "#0d1b2e", border: "1px solid #1e3a5f", color: "#e6edf3" }}
+                    />
+                    <input
+                      type="number"
+                      value={item.unitPrice}
+                      onChange={(e) => updateItem(i, "unitPrice", Number(e.target.value))}
+                      placeholder="€/Stk."
+                      className="flex-1 px-3 py-2 rounded-lg text-xs outline-none"
+                      style={{ background: "#0d1b2e", border: "1px solid #1e3a5f", color: "#e6edf3" }}
+                    />
+                    <p className="text-xs font-semibold text-right whitespace-nowrap" style={{ color: "#00c6ff", minWidth: 56 }}>
+                      {item.total.toFixed(2)} €
+                    </p>
+                  </div>
                 </div>
               ))}
             </div>
