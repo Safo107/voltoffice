@@ -127,7 +127,7 @@ export default function RechnungenPage() {
     setBetreff(r.betreff || ""); setZahlungsziel(r.zahlungsziel || "14 Tage netto");
     setSteuernummer(r.steuernummer || ""); setIban(r.iban || ""); setBic(r.bic || ""); setBank(r.bank || "");
     setFirmenname(r.firmenname || "ElektroGenius"); setFirmenStrasse(r.firmenStrasse || ""); setFirmenOrt(r.firmenOrt || "");
-    setItems(r.items?.length ? r.items : [{ ...EMPTY_ITEM }]);
+    setItems(r.items?.length ? r.items.map((i) => ({ ...i, gesamt: i.gesamt ?? (i.menge * i.einzelpreis) })) : [{ ...EMPTY_ITEM }]);
     setTab("positionen");
     setModalOpen(true);
   };
@@ -363,7 +363,7 @@ export default function RechnungenPage() {
                       </select>
                       <input type="number" value={item.einzelpreis} onChange={(e) => updateItem(idx, "einzelpreis", parseFloat(e.target.value) || 0)} placeholder="EP €" className="flex-1 px-2 py-1.5 rounded-lg text-xs outline-none" style={inputSty} />
                       <div className="text-xs font-bold px-2 py-1.5 rounded-lg whitespace-nowrap" style={{ background: "#112240", color: "#00c6ff", border: "1px solid #1e3a5f", minWidth: 56 }}>
-                        {item.gesamt.toFixed(2)} €
+                        {(item.gesamt ?? 0).toFixed(2)} €
                       </div>
                       <button onClick={() => setItems((p) => p.filter((_, i) => i !== idx))} className="px-2 py-1.5 rounded-lg text-xs" style={{ color: "#ef4444", border: "1px solid #ef444433", background: "#ef444411" }}>✕</button>
                     </div>
