@@ -11,9 +11,14 @@ import {
   Zap,
   Check,
   CheckCircle,
+  KeyRound,
+  Copy,
+  AlertCircle,
+  Loader,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/context/AuthContext";
 
 const sections = [
   { id: "profil", label: "Profil & Betrieb", icon: <User size={16} />, color: "#00c6ff" },
@@ -43,6 +48,7 @@ function inputStyle(focused = false) {
 
 export default function EinstellungenPage() {
   const router = useRouter();
+  const { user } = useAuth();
   const [active, setActive] = useState("profil");
 
   // Profil
@@ -77,6 +83,92 @@ export default function EinstellungenPage() {
   const [pw, setPw] = useState({ current: "", newPw: "", confirm: "" });
   const [pwError, setPwError] = useState("");
   const [pwSaved, setPwSaved] = useState(false);
+
+  // 2FA State
+  const [twoFaEnabled, setTwoFaEnabled] = useState(false);
+  const [twoFaLoading, setTwoFaLoading] = useState(false);
+  const [twoFaStep, setTwoFaStep] = useState<"idle" | "setup" | "confirm" | "backupCodes" | "disable">("idle");
+  const [twoFaSecret, setTwoFaSecret] = useState("");
+  const [twoFaQr, setTwoFaQr] = useState("");
+  const [twoFaToken, setTwoFaToken] = useState("");
+  const [twoFaError, setTwoFaError] = useState("");
+  const [backupCodes, setBackupCodes] = useState<string[]>([]);
+  const [disableToken, setDisableToken] = useState("");
+
+  useEffect(() => {
+    if (user?.uid) {
+      fetch(`/api/2fa/check?uid=${user.uid}`)
+        .then((r) => r.json())
+        .then((d) => setTwoFaEnabled(d.enabled))
+        .catch(() => {});
+    }
+  }, [user]);
+
+  const start2FASetup = async () => {
+    if (!user) return;
+    setTwoFaLoading(true);
+    setTwoFaError("");
+    try {
+      const res = await fetch("/api/2fa/setup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uid: user.uid, email: user.email }),
+      });
+      const data = await res.json();
+      setTwoFaSecret(data.secret);
+      setTwoFaQr(data.qrCode);
+      setTwoFaStep("setup");
+    } catch {
+      setTwoFaError("Fehler beim Setup. Bitte erneut versuchen.");
+    } finally {
+      setTwoFaLoading(false);
+    }
+  };
+
+  const confirm2FA = async () => {
+    if (!user) return;
+    setTwoFaLoading(true);
+    setTwoFaError("");
+    try {
+      const res = await fetch("/api/2fa/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uid: user.uid, secret: twoFaSecret, token: twoFaToken }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setTwoFaError(data.error); return; }
+      setBackupCodes(data.backupCodes);
+      setTwoFaEnabled(true);
+      setTwoFaStep("backupCodes");
+      setTwoFaToken("");
+    } catch {
+      setTwoFaError("Fehler bei der Verifikation.");
+    } finally {
+      setTwoFaLoading(false);
+    }
+  };
+
+  const disable2FA = async () => {
+    if (!user) return;
+    setTwoFaLoading(true);
+    setTwoFaError("");
+    try {
+      const res = await fetch("/api/2fa/disable", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uid: user.uid, token: disableToken }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setTwoFaError(data.error); return; }
+      setTwoFaEnabled(false);
+      setTwoFaStep("idle");
+      setDisableToken("");
+    } catch {
+      setTwoFaError("Fehler beim Deaktivieren.");
+    } finally {
+      setTwoFaLoading(false);
+    }
+  };
 
   const save = (setter: (v: boolean) => void) => {
     setter(true);
@@ -386,25 +478,168 @@ export default function EinstellungenPage() {
               </div>
 
               <div className="rounded-xl p-5" style={{ background: "#112240", border: "1px solid #1e3a5f" }}>
-                <h3 className="text-sm font-semibold mb-3" style={{ color: "#e6edf3" }}>Zwei-Faktor-Authentifizierung</h3>
-                <p className="text-xs mb-4" style={{ color: "#8b9ab5" }}>
-                  Sichern Sie Ihr Konto mit einer zusätzlichen Verifikation beim Anmelden.
-                </p>
-                <div
-                  className="flex items-center justify-between p-4 rounded-xl"
-                  style={{ background: "#0d1b2e", border: "1px solid #1e3a5f" }}
-                >
+                <div className="flex items-center justify-between mb-4">
                   <div>
-                    <p className="text-sm font-medium" style={{ color: "#e6edf3" }}>Authenticator-App</p>
-                    <p className="text-xs mt-0.5" style={{ color: "#8b9ab5" }}>z.B. Google Authenticator, Authy</p>
+                    <h3 className="text-sm font-semibold" style={{ color: "#e6edf3" }}>Zwei-Faktor-Authentifizierung (2FA)</h3>
+                    <p className="text-xs mt-1" style={{ color: "#8b9ab5" }}>
+                      TOTP — Google Authenticator, Authy, etc.
+                    </p>
                   </div>
-                  <span
-                    className="text-xs px-2.5 py-1 rounded-full"
-                    style={{ background: "#1e3a5f", color: "#8b9ab5", border: "1px solid #2a4a6f" }}
-                  >
-                    Nicht aktiviert
+                  <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${twoFaEnabled ? "" : ""}`}
+                    style={twoFaEnabled
+                      ? { background: "#22c55e18", color: "#22c55e", border: "1px solid #22c55e33" }
+                      : { background: "#1e3a5f", color: "#8b9ab5", border: "1px solid #2a4a6f" }}>
+                    {twoFaEnabled ? "Aktiv" : "Nicht aktiviert"}
                   </span>
                 </div>
+
+                {twoFaError && (
+                  <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg mb-3 text-xs"
+                    style={{ background: "#ef444418", border: "1px solid #ef444433", color: "#ef4444" }}>
+                    <AlertCircle size={13} />{twoFaError}
+                  </div>
+                )}
+
+                {/* IDLE: Status + Action */}
+                {twoFaStep === "idle" && (
+                  <div className="flex gap-2 flex-wrap">
+                    {!twoFaEnabled ? (
+                      <button onClick={start2FASetup} disabled={twoFaLoading}
+                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50 transition-all hover:opacity-90"
+                        style={{ background: "linear-gradient(135deg, #00c6ff, #0099cc)", color: "#0d1b2e" }}>
+                        {twoFaLoading ? <Loader size={14} className="animate-spin" /> : <Shield size={14} />}
+                        2FA aktivieren
+                      </button>
+                    ) : (
+                      <button onClick={() => { setTwoFaStep("disable"); setTwoFaError(""); setDisableToken(""); }}
+                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all hover:opacity-90"
+                        style={{ background: "#ef444418", color: "#ef4444", border: "1px solid #ef444433" }}>
+                        <Shield size={14} />2FA deaktivieren
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* SETUP: QR Code anzeigen */}
+                {twoFaStep === "setup" && twoFaQr && (
+                  <div className="space-y-4">
+                    <p className="text-xs" style={{ color: "#8b9ab5" }}>
+                      Scanne den QR-Code mit deiner Authenticator-App (Google Authenticator, Authy).
+                    </p>
+                    <div className="flex justify-center">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={twoFaQr} alt="QR Code" className="rounded-xl" style={{ width: 180, height: 180, background: "#fff", padding: 8 }} />
+                    </div>
+                    <div className="p-3 rounded-xl text-xs font-mono break-all text-center"
+                      style={{ background: "#0d1b2e", border: "1px solid #1e3a5f", color: "#8b9ab5" }}>
+                      {twoFaSecret}
+                    </div>
+                    <button onClick={() => { navigator.clipboard.writeText(twoFaSecret); }}
+                      className="flex items-center gap-1.5 text-xs mx-auto transition-opacity hover:opacity-70"
+                      style={{ color: "#4a6fa5" }}>
+                      <Copy size={12} />Schlüssel kopieren
+                    </button>
+                    <div>
+                      <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>
+                        Code aus Authenticator-App eingeben
+                      </label>
+                      <input
+                        type="text"
+                        value={twoFaToken}
+                        onChange={(e) => setTwoFaToken(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                        placeholder="000000"
+                        maxLength={6}
+                        className="w-full px-4 py-3 rounded-xl text-center text-xl font-mono tracking-widest outline-none"
+                        style={inputStyle()}
+                        onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
+                        onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => setTwoFaStep("idle")}
+                        className="flex-1 py-2.5 rounded-xl text-sm font-semibold"
+                        style={{ background: "#0d1b2e", border: "1px solid #1e3a5f", color: "#8b9ab5" }}>
+                        Abbrechen
+                      </button>
+                      <button onClick={confirm2FA} disabled={twoFaToken.length !== 6 || twoFaLoading}
+                        className="flex-1 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50 transition-all hover:opacity-90"
+                        style={{ background: "linear-gradient(135deg, #22c55e, #16a34a)", color: "#fff" }}>
+                        {twoFaLoading ? <Loader size={14} className="animate-spin" /> : <Check size={14} />}
+                        Bestätigen & aktivieren
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* BACKUP CODES */}
+                {twoFaStep === "backupCodes" && (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-xs"
+                      style={{ background: "#22c55e18", border: "1px solid #22c55e33", color: "#22c55e" }}>
+                      <CheckCircle size={13} />2FA erfolgreich aktiviert!
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold mb-2" style={{ color: "#e6edf3" }}>
+                        Backup-Codes — nur einmal angezeigt!
+                      </p>
+                      <p className="text-xs mb-3" style={{ color: "#8b9ab5" }}>
+                        Speichere diese Codes sicher. Jeder Code kann einmalig verwendet werden, falls du keinen Zugriff auf deine Authenticator-App hast.
+                      </p>
+                      <div className="grid grid-cols-2 gap-1.5 p-3 rounded-xl"
+                        style={{ background: "#0d1b2e", border: "1px solid #1e3a5f" }}>
+                        {backupCodes.map((code) => (
+                          <span key={code} className="text-xs font-mono text-center py-1.5 rounded-lg px-2"
+                            style={{ background: "#112240", color: "#00c6ff", border: "1px solid #1e3a5f" }}>
+                            {code}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    <button onClick={() => navigator.clipboard.writeText(backupCodes.join("\n"))}
+                      className="flex items-center gap-1.5 text-xs mx-auto transition-opacity hover:opacity-70"
+                      style={{ color: "#4a6fa5" }}>
+                      <Copy size={12} />Alle Codes kopieren
+                    </button>
+                    <button onClick={() => setTwoFaStep("idle")}
+                      className="w-full py-2.5 rounded-xl text-sm font-semibold transition-all hover:opacity-90"
+                      style={{ background: "linear-gradient(135deg, #00c6ff, #0099cc)", color: "#0d1b2e" }}>
+                      Fertig
+                    </button>
+                  </div>
+                )}
+
+                {/* DISABLE */}
+                {twoFaStep === "disable" && (
+                  <div className="space-y-3">
+                    <p className="text-xs" style={{ color: "#8b9ab5" }}>
+                      Gib einen gültigen Code aus deiner Authenticator-App ein, um 2FA zu deaktivieren.
+                    </p>
+                    <input
+                      type="text"
+                      value={disableToken}
+                      onChange={(e) => setDisableToken(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                      placeholder="000000"
+                      maxLength={6}
+                      className="w-full px-4 py-3 rounded-xl text-center text-xl font-mono tracking-widest outline-none"
+                      style={inputStyle()}
+                      onFocus={(e) => { e.currentTarget.style.borderColor = "#ef444466"; }}
+                      onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
+                    />
+                    <div className="flex gap-2">
+                      <button onClick={() => setTwoFaStep("idle")}
+                        className="flex-1 py-2.5 rounded-xl text-sm font-semibold"
+                        style={{ background: "#0d1b2e", border: "1px solid #1e3a5f", color: "#8b9ab5" }}>
+                        Abbrechen
+                      </button>
+                      <button onClick={disable2FA} disabled={disableToken.length !== 6 || twoFaLoading}
+                        className="flex-1 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50 transition-all hover:opacity-90"
+                        style={{ background: "#ef4444", color: "#fff" }}>
+                        {twoFaLoading ? <Loader size={14} className="animate-spin" /> : <KeyRound size={14} />}
+                        Deaktivieren
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}

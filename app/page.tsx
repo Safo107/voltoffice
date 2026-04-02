@@ -3,8 +3,9 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Zap, Mail, Lock, Eye, EyeOff, Globe, AlertCircle, CheckCircle, User, ArrowLeft } from "lucide-react";
+import { Zap, Mail, Lock, Eye, EyeOff, Globe, AlertCircle, CheckCircle, User, ArrowLeft, Shield, KeyRound } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { auth } from "@/lib/firebase";
 
 type Mode = "login" | "register" | "reset";
 
@@ -34,7 +35,7 @@ function parseFirebaseError(msg: string): string {
 
 export default function AuthPage() {
   const router = useRouter();
-  const { user, loading, loginWithEmail, loginWithGoogle, register, resetPassword } = useAuth();
+  const { user, loading, loginWithEmail, loginWithGoogle, register, resetPassword, logout } = useAuth();
   const [mode, setMode] = useState<Mode>("login");
 
   const [email, setEmail] = useState("");
@@ -45,9 +46,15 @@ export default function AuthPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
+  // 2FA State
+  const [twoFaRequired, setTwoFaRequired] = useState(false);
+  const [twoFaUid, setTwoFaUid] = useState("");
+  const [twoFaToken, setTwoFaToken] = useState("");
+  const [twoFaSubmitting, setTwoFaSubmitting] = useState(false);
+
   useEffect(() => {
-    if (!loading && user) router.replace("/dashboard");
-  }, [user, loading, router]);
+    if (!loading && user && !twoFaRequired) router.replace("/dashboard");
+  }, [user, loading, router, twoFaRequired]);
 
   const switchMode = (m: Mode) => {
     setMode(m);
@@ -71,6 +78,17 @@ export default function AuthPage() {
     try {
       if (mode === "login") {
         await loginWithEmail(email, password);
+        const uid = auth.currentUser?.uid;
+        if (uid) {
+          const check = await fetch(`/api/2fa/check?uid=${uid}`);
+          const data = await check.json();
+          if (data.enabled) {
+            setTwoFaRequired(true);
+            setTwoFaUid(uid);
+            setSubmitting(false);
+            return;
+          }
+        }
         router.replace("/dashboard");
       } else if (mode === "register") {
         await register(email, password);
@@ -87,11 +105,46 @@ export default function AuthPage() {
     }
   };
 
+  const handleTwoFaSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setTwoFaSubmitting(true);
+    setError("");
+    try {
+      const res = await fetch("/api/2fa/check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uid: twoFaUid, token: twoFaToken.trim() }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setTwoFaRequired(false);
+        router.replace("/dashboard");
+      } else {
+        setError(data.error || "Ungültiger Code.");
+      }
+    } catch {
+      setError("Netzwerkfehler. Bitte erneut versuchen.");
+    } finally {
+      setTwoFaSubmitting(false);
+    }
+  };
+
   const handleGoogleLogin = async () => {
     setError("");
     setSubmitting(true);
     try {
       await loginWithGoogle();
+      const uid = auth.currentUser?.uid;
+      if (uid) {
+        const check = await fetch(`/api/2fa/check?uid=${uid}`);
+        const data = await check.json();
+        if (data.enabled) {
+          setTwoFaRequired(true);
+          setTwoFaUid(uid);
+          setSubmitting(false);
+          return;
+        }
+      }
       router.replace("/dashboard");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -100,6 +153,69 @@ export default function AuthPage() {
       setSubmitting(false);
     }
   };
+
+  // 2FA Screen
+  if (twoFaRequired) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4" style={{ background: "#0d1b2e" }}>
+        <div className="w-full max-w-sm">
+          <div className="text-center mb-6">
+            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl mb-4"
+              style={{ background: "rgba(0,198,255,0.12)", border: "1px solid rgba(0,198,255,0.3)" }}>
+              <Shield size={26} style={{ color: "#00c6ff" }} />
+            </div>
+            <h2 className="text-xl font-bold" style={{ color: "#e6edf3", fontFamily: "var(--font-syne)" }}>
+              Zwei-Faktor-Authentifizierung
+            </h2>
+            <p className="text-sm mt-2" style={{ color: "#8b9ab5" }}>
+              Gib den 6-stelligen Code aus deiner Authenticator-App ein.
+            </p>
+          </div>
+
+          <form onSubmit={handleTwoFaSubmit} className="space-y-4">
+            {error && (
+              <div className="flex items-start gap-2 px-4 py-3 rounded-xl text-sm"
+                style={{ background: "#ef444418", border: "1px solid #ef444433", color: "#ef4444" }}>
+                <AlertCircle size={15} className="shrink-0 mt-0.5" />{error}
+              </div>
+            )}
+            <div>
+              <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>
+                Authenticator-Code oder Backup-Code
+              </label>
+              <div className="relative">
+                <KeyRound size={16} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "#8b9ab5" }} />
+                <input
+                  type="text"
+                  value={twoFaToken}
+                  onChange={(e) => setTwoFaToken(e.target.value.replace(/\s/g, ""))}
+                  placeholder="000000"
+                  maxLength={8}
+                  required
+                  autoFocus
+                  className="w-full py-3 pl-10 pr-4 rounded-xl text-lg text-center font-mono tracking-widest outline-none"
+                  style={{ background: "#112240", border: "1px solid #1e3a5f", color: "#e6edf3" }}
+                  onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
+                  onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
+                />
+              </div>
+            </div>
+            <button type="submit" disabled={twoFaSubmitting || twoFaToken.length < 6}
+              className="w-full py-3 rounded-xl text-sm font-semibold transition-all hover:opacity-90 disabled:opacity-50"
+              style={{ background: "linear-gradient(135deg, #00c6ff, #0099cc)", color: "#0d1b2e" }}>
+              {twoFaSubmitting ? "Wird geprüft…" : "Bestätigen"}
+            </button>
+            <button type="button"
+              onClick={async () => { await logout(); setTwoFaRequired(false); }}
+              className="w-full py-2 text-xs transition-opacity hover:opacity-70"
+              style={{ color: "#8b9ab5" }}>
+              Abbrechen — zurück zur Anmeldung
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
