@@ -7,8 +7,12 @@ interface ProContextType {
   isPro: boolean;
   isTrial: boolean;
   trialDaysLeft: number;
-  tier: "trial" | "free" | "pro";
+  tier: "trial" | "free" | "pro" | "business";
+  plan: "free" | "pro" | "business";
   loadingPro: boolean;
+  hasStripeCustomer: boolean;
+  lastPaymentFailed: string | null;
+  proSince: string | null;
   refreshPro: () => Promise<void>;
 }
 
@@ -17,7 +21,11 @@ const ProContext = createContext<ProContextType>({
   isTrial: false,
   trialDaysLeft: 0,
   tier: "free",
+  plan: "free",
   loadingPro: true,
+  hasStripeCustomer: false,
+  lastPaymentFailed: null,
+  proSince: null,
   refreshPro: async () => {},
 });
 
@@ -26,8 +34,12 @@ export function ProProvider({ children }: { children: React.ReactNode }) {
   const [isPro, setIsPro] = useState(false);
   const [isTrial, setIsTrial] = useState(false);
   const [trialDaysLeft, setTrialDaysLeft] = useState(0);
-  const [tier, setTier] = useState<"trial" | "free" | "pro">("free");
+  const [tier, setTier] = useState<"trial" | "free" | "pro" | "business">("free");
+  const [plan, setPlan] = useState<"free" | "pro" | "business">("free");
   const [loadingPro, setLoadingPro] = useState(true);
+  const [hasStripeCustomer, setHasStripeCustomer] = useState(false);
+  const [lastPaymentFailed, setLastPaymentFailed] = useState<string | null>(null);
+  const [proSince, setProSince] = useState<string | null>(null);
 
   const fetchPro = async (uid: string) => {
     try {
@@ -37,11 +49,19 @@ export function ProProvider({ children }: { children: React.ReactNode }) {
       setIsTrial(data.isTrial === true);
       setTrialDaysLeft(data.trialDaysLeft || 0);
       setTier(data.tier || "free");
+      setPlan(data.plan || "free");
+      setHasStripeCustomer(data.hasStripeCustomer === true);
+      setLastPaymentFailed(data.lastPaymentFailed || null);
+      setProSince(data.proSince || null);
     } catch {
       setIsPro(false);
       setIsTrial(false);
       setTrialDaysLeft(0);
       setTier("free");
+      setPlan("free");
+      setHasStripeCustomer(false);
+      setLastPaymentFailed(null);
+      setProSince(null);
     } finally {
       setLoadingPro(false);
     }
@@ -59,12 +79,13 @@ export function ProProvider({ children }: { children: React.ReactNode }) {
       setIsTrial(false);
       setTrialDaysLeft(0);
       setTier("free");
+      setPlan("free");
       setLoadingPro(false);
     }
   }, [user]);
 
   return (
-    <ProContext.Provider value={{ isPro, isTrial, trialDaysLeft, tier, loadingPro, refreshPro }}>
+    <ProContext.Provider value={{ isPro, isTrial, trialDaysLeft, tier, plan, loadingPro, hasStripeCustomer, lastPaymentFailed, proSince, refreshPro }}>
       {children}
     </ProContext.Provider>
   );

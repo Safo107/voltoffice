@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { authFetch } from "@/lib/authFetch";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Modal from "@/components/ui/Modal";
 import EmptyState from "@/components/ui/EmptyState";
@@ -47,7 +48,7 @@ export default function MitarbeiterPage() {
   const fetchListe = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/mitarbeiter");
+      const res = await authFetch("/api/mitarbeiter");
       const data = await res.json();
       setListe(Array.isArray(data) ? data : []);
     } catch { setListe([]); }
@@ -62,9 +63,9 @@ export default function MitarbeiterPage() {
     setSaving(true);
     try {
       if (editItem?._id) {
-        await fetch(`/api/mitarbeiter/${editItem._id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
+        await authFetch(`/api/mitarbeiter/${editItem._id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
       } else {
-        await fetch("/api/mitarbeiter", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
+        await authFetch("/api/mitarbeiter", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
       }
       setModalOpen(false);
       fetchListe();
@@ -73,7 +74,7 @@ export default function MitarbeiterPage() {
 
   const del = async (id: string) => {
     if (!confirm("Mitarbeiter wirklich löschen?")) return;
-    await fetch(`/api/mitarbeiter/${id}`, { method: "DELETE" });
+    await authFetch(`/api/mitarbeiter/${id}`, { method: "DELETE" });
     fetchListe();
   };
 
@@ -100,7 +101,7 @@ export default function MitarbeiterPage() {
           <p className="text-sm" style={{ color: "#8b9ab5" }}>Mitarbeiter anlegen, Rollen zuweisen und Stundensätze verwalten.</p>
         </div>
         <button onClick={() => router.push("/upgrade")} className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all hover:opacity-90" style={{ background: "linear-gradient(135deg,#f5a623,#c4841c)", color: "#0d1b2e" }}>
-          <Zap size={16} /> Auf Pro upgraden — 9,99€/Monat
+          <Zap size={16} /> Jetzt upgraden — ab 19,99€/Monat
         </button>
       </div>
     </DashboardLayout>

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { authFetch } from "@/lib/authFetch";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { usePro } from "@/context/ProContext";
 import { FileDown, Lock, Zap, FileText, Receipt, Database, Loader, CheckCircle } from "lucide-react";
@@ -25,7 +26,7 @@ export default function ExportPage() {
   useEffect(() => {
     if (isPro) {
       setLoadingList(true);
-      fetch("/api/angebote")
+      authFetch("/api/angebote")
         .then((r) => r.json())
         .then((d) => setAngebote(Array.isArray(d) ? d : []))
         .finally(() => setLoadingList(false));
@@ -36,7 +37,7 @@ export default function ExportPage() {
     setDownloading(id);
     setDone(null);
     try {
-      const res = await fetch(`/api/angebote/${id}/pdf`);
+      const res = await authFetch(`/api/angebote/${id}/pdf`);
       if (!res.ok) return alert("PDF konnte nicht erstellt werden.");
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -83,7 +84,7 @@ export default function ExportPage() {
             style={{ background: "linear-gradient(135deg, #f5a623, #c4841c)", color: "#0d1b2e" }}
           >
             <Zap size={16} />
-            Auf Pro upgraden — 9,99€/Monat
+            Jetzt upgraden — ab 19,99€/Monat
           </button>
         </div>
       </DashboardLayout>

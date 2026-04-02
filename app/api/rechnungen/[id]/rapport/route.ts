@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 import { PDFDocument, rgb, StandardFonts, type PDFPage } from "pdf-lib";
+import { withAuth } from "@/lib/withAuth";
 
 function fDate(iso: string) {
   return new Date(iso).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
@@ -15,15 +16,17 @@ function drawBorder(page: PDFPage, x: number, y: number, w: number, h: number, c
   page.drawLine({ start: { x: x + w, y }, end: { x: x + w, y: y + h }, ...opts });
 }
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+type Context = { params: Promise<{ id: string }> };
+
+export const GET = withAuth<Context>(async (_req, userId, { params }) => {
   try {
     const { id } = await params;
     const db = await getDb();
-    const r = await db.collection("rechnungen").findOne({ _id: new ObjectId(id) });
+    const r = await db.collection("rechnungen").findOne({ _id: new ObjectId(id), userId });
     if (!r) return NextResponse.json({ error: "Nicht gefunden" }, { status: 404 });
 
     const zeiten = await db.collection("zeiterfassung")
-      .find({ projectName: { $exists: true } })
+      .find({ userId, projectName: { $exists: true } })
       .sort({ date: 1 })
       .limit(100)
       .toArray();
@@ -168,4 +171,4 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     console.error(e);
     return NextResponse.json({ error: "PDF-Fehler" }, { status: 500 });
   }
-}
+});

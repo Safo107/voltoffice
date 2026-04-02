@@ -18,6 +18,7 @@ export async function POST(req: NextRequest) {
       subscriptionTier: "trial",
       trialEndsAt,
       pro: false,
+      role: "admin",
       createdAt: new Date(),
     });
 

@@ -1,18 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
+import { withAuth } from "@/lib/withAuth";
 
 // DATEV EXTF CSV-Format (vereinfacht) für Steuerberater
-export async function GET(req: NextRequest) {
+export const GET = withAuth(async (req, userId) => {
   try {
     const { searchParams } = new URL(req.url);
     const type = searchParams.get("type") || "rechnungen"; // rechnungen | angebote
 
+    console.log(`[DATEV] UID: ${userId}, type: ${type}`);
+
     const db = await getDb();
     const collection = type === "angebote" ? "angebote" : "rechnungen";
-    const docs = await db.collection(collection).find({}).sort({ createdAt: -1 }).toArray();
+    const filter: Record<string, unknown> = { userId };
+    // For DATEV export, only include finalized invoices (paid or sent)
+    if (type === "rechnungen") {
+      filter.status = { $in: ["bezahlt", "offen", "überfällig"] };
+    }
+    const docs = await db
+      .collection(collection)
+      .find(filter)
+      .sort(type === "rechnungen"
+        ? { invoiceYear: 1 as const, invoiceIndex: 1 as const }
+        : { createdAt: 1 as const })
+      .toArray();
 
     // DATEV EXTF Header (vereinfacht)
-    const headerLine = `"EXTF";700;21;"Buchungsstapel";4;;"VoltOffice";"";"";"ElektroGenius";"";"";"";"";"";""`;
+    const headerLine = `"EXTF";700;21;"Buchungsstapel";4;;"VoltOffice";"";"";"";"";"";"";"";"";""`;
     const columnLine = `Umsatz (ohne Soll/Haben-Kz);Soll/Haben-Kennzeichen;WKZ Umsatz;Kurs;Basis-Umsatz;WKZ Basis-Umsatz;Konto;Gegenkonto (ohne BU-Schlüssel);BU-Schlüssel;Belegdatum;Belegfeld 1;Belegfeld 2;Skonto;Buchungstext`;
 
     const rows = docs.map((doc) => {
@@ -54,4 +68,4 @@ export async function GET(req: NextRequest) {
     console.error(e);
     return NextResponse.json({ error: "Export-Fehler" }, { status: 500 });
   }
-}
+});

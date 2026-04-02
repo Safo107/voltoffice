@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth } from "./firebase-admin";
 
-export type AuthedHandler<C = undefined> = (
+export type AuthedHandler<C = unknown> = (
   req: NextRequest,
   userId: string,
   context: C
@@ -10,7 +10,7 @@ export type AuthedHandler<C = undefined> = (
 /** Wraps a route handler with Firebase token verification.
  *  Expects: Authorization: Bearer <firebase-id-token>
  */
-export function withAuth<C = undefined>(handler: AuthedHandler<C>) {
+export function withAuth<C = unknown>(handler: AuthedHandler<C>) {
   return async (req: NextRequest, context: C) => {
     try {
       const authHeader = req.headers.get("authorization");
@@ -20,9 +20,13 @@ export function withAuth<C = undefined>(handler: AuthedHandler<C>) {
       const token = authHeader.split(" ")[1];
 
       if (!adminAuth) {
-        // Dev-Fallback: wenn Firebase Admin nicht konfiguriert, UID aus Header lesen
+        // Dev-Fallback: nur in Development erlaubt
+        if (process.env.NODE_ENV === "production") {
+          return NextResponse.json({ error: "Firebase Admin nicht konfiguriert" }, { status: 503 });
+        }
         const uid = req.headers.get("x-uid");
-        if (!uid) return NextResponse.json({ error: "Nicht autorisiert" }, { status: 401 });
+        if (!uid) return NextResponse.json({ error: "Nicht autorisiert (Dev: x-uid Header fehlt)" }, { status: 401 });
+        console.warn(`[withAuth] DEV-FALLBACK aktiv – UID aus x-uid Header: ${uid}`);
         return handler(req, uid, context);
       }
 

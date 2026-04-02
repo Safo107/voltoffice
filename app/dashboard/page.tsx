@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { authFetch } from "@/lib/authFetch";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import StatCard from "@/components/dashboard/StatCard";
 import Modal from "@/components/ui/Modal";
@@ -55,9 +56,9 @@ function OmniSearch({ open, onClose }: { open: boolean; onClose: () => void }) {
     const q = query.toLowerCase();
     setLoading(true);
     Promise.all([
-      fetch("/api/projekte").then(r => r.json()).catch(() => []),
-      fetch("/api/kunden").then(r => r.json()).catch(() => []),
-      fetch("/api/angebote").then(r => r.json()).catch(() => []),
+      authFetch("/api/projekte").then(r => r.json()).catch(() => []),
+      authFetch("/api/kunden").then(r => r.json()).catch(() => []),
+      authFetch("/api/angebote").then(r => r.json()).catch(() => []),
     ]).then(([projekte, kunden, angebote]) => {
       const hits: typeof results = [];
       (projekte as Projekt[]).forEach(p => {
@@ -268,9 +269,9 @@ export default function DashboardPage() {
     const load = async () => {
       try {
         const [statsRes, offersRes, projekteRes] = await Promise.all([
-          fetch(`/api/dashboard?period=${period}`),
-          fetch("/api/angebote"),
-          fetch("/api/projekte"),
+          authFetch(`/api/dashboard?period=${period}`),
+          authFetch("/api/angebote"),
+          authFetch("/api/projekte"),
         ]);
         if (statsRes.ok) setStats(await statsRes.json());
         if (offersRes.ok) {
@@ -300,23 +301,24 @@ export default function DashboardPage() {
   }, [handleKeydown]);
 
   const s = stats;
-  const effectiveOfferLimit   = isPro ? undefined : (s?.offerLimit ?? 3);
-  const effectiveProjectLimit = isPro ? undefined : (s?.projectLimit ?? 3);
-  const effectiveCustomerLimit = isPro ? undefined : (s?.customerLimit ?? 5);
+  // -1 means unlimited (Pro/Business plans)
+  const effectiveOfferLimit    = (s?.offerLimit    ?? -1) === -1 ? undefined : s?.offerLimit;
+  const effectiveProjectLimit  = (s?.projectLimit  ?? -1) === -1 ? undefined : s?.projectLimit;
+  const effectiveCustomerLimit = (s?.customerLimit ?? -1) === -1 ? undefined : s?.customerLimit;
 
-  // Action-Alerts berechnen
+  // Action-Alerts berechnen (only shown when finite limits exist)
   const alerts: { type: "warn" | "error"; text: string; href: string }[] = [];
-  if (!isPro && s) {
-    if (s.offerCount >= s.offerLimit)
-      alerts.push({ type: "error", text: `Angebots-Limit erreicht (${s.offerCount}/${s.offerLimit}) — Pro-Upgrade erforderlich`, href: "/upgrade" });
-    else if (s.offerCount >= s.offerLimit - 1)
-      alerts.push({ type: "warn", text: `Nur noch 1 Angebot im Free-Plan verfügbar (${s.offerCount}/${s.offerLimit})`, href: "/upgrade" });
-
-    if (s.projectCount >= s.projectLimit)
-      alerts.push({ type: "error", text: `Projekt-Limit erreicht (${s.projectCount}/${s.projectLimit})`, href: "/upgrade" });
-
-    if (s.customerCount >= s.customerLimit)
-      alerts.push({ type: "error", text: `Kunden-Limit erreicht (${s.customerCount}/${s.customerLimit})`, href: "/upgrade" });
+  if (s) {
+    if (effectiveOfferLimit !== undefined) {
+      if (s.offerCount >= effectiveOfferLimit)
+        alerts.push({ type: "error", text: `Angebots-Limit erreicht (${s.offerCount}/${effectiveOfferLimit}) — Upgrade erforderlich`, href: "/upgrade" });
+      else if (s.offerCount >= effectiveOfferLimit - 1)
+        alerts.push({ type: "warn", text: `Nur noch 1 Angebot im Free-Plan verfügbar (${s.offerCount}/${effectiveOfferLimit})`, href: "/upgrade" });
+    }
+    if (effectiveProjectLimit !== undefined && s.projectCount >= effectiveProjectLimit)
+      alerts.push({ type: "error", text: `Projekt-Limit erreicht (${s.projectCount}/${effectiveProjectLimit})`, href: "/upgrade" });
+    if (effectiveCustomerLimit !== undefined && s.customerCount >= effectiveCustomerLimit)
+      alerts.push({ type: "error", text: `Kunden-Limit erreicht (${s.customerCount}/${effectiveCustomerLimit})`, href: "/upgrade" });
   }
 
   const statusLabel: Record<string, string> = {
@@ -425,13 +427,13 @@ export default function DashboardPage() {
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
         <StatCard label="Kunden" value={loadingStats ? "…" : String(s?.customerCount ?? 0)}
           icon={<Users size={20} />} accent="cyan" current={s?.customerCount} limit={effectiveCustomerLimit}
-          sublabel={isPro ? "Unbegrenzt (Pro)" : `Free: bis ${s?.customerLimit ?? 5}`} />
+          sublabel={effectiveCustomerLimit === undefined ? "Unbegrenzt" : `Free: bis ${effectiveCustomerLimit}`} />
         <StatCard label="Offene Angebote" value={loadingStats ? "…" : String(s?.offerCount ?? 0)}
           icon={<FileText size={20} />} accent="orange" current={s?.offerCount} limit={effectiveOfferLimit}
           sublabel={s?.openOfferValue ? `${(s.openOfferValue).toLocaleString("de-DE")} €` : "–"} />
         <StatCard label="Projekte" value={loadingStats ? "…" : String(s?.projectCount ?? 0)}
           icon={<Briefcase size={20} />} accent="green" current={s?.projectCount} limit={effectiveProjectLimit}
-          sublabel={isPro ? "Unbegrenzt (Pro)" : `Free: bis ${s?.projectLimit ?? 3}`} />
+          sublabel={effectiveProjectLimit === undefined ? "Unbegrenzt" : `Free: bis ${effectiveProjectLimit}`} />
         <StatCard label="Stunden (Woche)" value={loadingStats ? "…" : `${s?.hoursThisWeek ?? 0}h`}
           icon={<Clock size={20} />} accent="muted" sublabel="Zeiterfassung" />
       </div>

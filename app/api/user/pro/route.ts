@@ -23,7 +23,10 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const tier = trialActive ? "trial" : (isPro ? "pro" : "free");
+    const plan: "free" | "pro" | "business" = isPro
+      ? (user?.plan === "business" ? "business" : "pro")
+      : "free";
+    const tier = trialActive ? "trial" : plan;
     const isTrial = trialActive;
     const trialDaysLeft = isTrial && trialEndsAt
       ? Math.max(0, Math.ceil((trialEndsAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
@@ -31,10 +34,15 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       pro: isPro || isTrial,
+      plan,
       tier,
       isTrial,
       trialDaysLeft,
       trialEndsAt: trialEndsAt?.toISOString() || null,
+      hasStripeCustomer: !!user?.stripeCustomerId,
+      stripeSubscriptionStatus: user?.stripeSubscriptionStatus || null,
+      lastPaymentFailed: user?.lastPaymentFailed || null,
+      proSince: user?.proSince || null,
     });
   } catch {
     return NextResponse.json({ pro: false, tier: "free", isTrial: false, trialDaysLeft: 0 });

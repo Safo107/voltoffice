@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
+import { withAuth } from "@/lib/withAuth";
+import { getCompanyData } from "@/lib/getCompanyData";
 
 function fDate(iso: string) {
   return new Date(iso).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
@@ -10,12 +12,16 @@ function fEur(v: number) {
   return v.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " \u20AC";
 }
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+type Context = { params: Promise<{ id: string }> };
+
+export const GET = withAuth<Context>(async (_req, userId, { params }) => {
   try {
     const { id } = await params;
     const db = await getDb();
-    const r = await db.collection("rechnungen").findOne({ _id: new ObjectId(id) });
+    const r = await db.collection("rechnungen").findOne({ _id: new ObjectId(id), userId });
     if (!r) return NextResponse.json({ error: "Nicht gefunden" }, { status: 404 });
+
+    const company = await getCompanyData(userId);
 
     const pdfDoc = await PDFDocument.create();
     const page = pdfDoc.addPage([595, 842]);
@@ -35,17 +41,39 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     // ── Dünner Akzentbalken oben ──────────────────────────────────────────────
     page.drawRectangle({ x: 0, y: height - 5, width, height: 5, color: C_ACCENT });
 
-    // ── Firmenname (links) ────────────────────────────────────────────────────
-    const firma = String(r.firmenname || "");
-    if (firma) {
-      page.drawText(firma, { x: 40, y: height - 38, size: 15, font: bold, color: C_DARK });
+    // ── Logo + Firmenname (links) ─────────────────────────────────────────────
+    const firmaName = company.companyName || String(r.firmenname || "");
+    let logoBottomY = height - 38;
+
+    if (company.companyLogoBase64) {
+      try {
+        const b64data = company.companyLogoBase64.replace(/^data:image\/[a-z]+;base64,/, "");
+        const logoBytes = Buffer.from(b64data, "base64");
+        const isJpeg = company.companyLogoBase64.startsWith("data:image/jpeg") || company.companyLogoBase64.startsWith("data:image/jpg");
+        const logoImg = isJpeg ? await pdfDoc.embedJpg(logoBytes) : await pdfDoc.embedPng(logoBytes);
+        const logoH = 32;
+        const logoW = Math.min(logoImg.width * (logoH / logoImg.height), 120);
+        page.drawImage(logoImg, { x: 40, y: height - 38 - logoH + 6, width: logoW, height: logoH });
+        logoBottomY = height - 38 - logoH - 4;
+      } catch { /* Logo-Fehler ignorieren */ }
     }
-    if (r.firmenslogan) {
-      page.drawText(String(r.firmenslogan), { x: 40, y: height - 54, size: 8, font: reg, color: C_MUTED });
+
+    if (firmaName) {
+      page.drawText(firmaName, { x: 40, y: logoBottomY, size: 14, font: bold, color: C_DARK });
+      logoBottomY -= 14;
     }
-    const adresse = [r.firmenStrasse, r.firmenOrt].filter(Boolean).join("  ·  ");
+    const adressParts = [
+      [company.companyAddress, [company.companyZip, company.companyCity].filter(Boolean).join(" ")].filter(Boolean).join(", "),
+      [r.firmenStrasse, r.firmenOrt].filter(Boolean).join("  ·  "),
+    ].filter(Boolean);
+    const adresse = adressParts[0] || "";
     if (adresse) {
-      page.drawText(adresse, { x: 40, y: firma ? height - 66 : height - 38, size: 7.5, font: reg, color: C_MUTED });
+      page.drawText(adresse, { x: 40, y: logoBottomY, size: 7.5, font: reg, color: C_MUTED });
+      logoBottomY -= 12;
+    }
+    const kontakt = [company.companyPhone || r.telefon, company.companyEmail].filter(Boolean).join("  ·  ");
+    if (kontakt) {
+      page.drawText(kontakt, { x: 40, y: logoBottomY, size: 7, font: reg, color: C_MUTED });
     }
 
     // ── Dokumenttyp (rechts) ──────────────────────────────────────────────────
@@ -137,25 +165,46 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     // ── Summenblock ───────────────────────────────────────────────────────────
     page.drawLine({ start: { x: 40, y }, end: { x: width - 40, y }, thickness: 0.75, color: C_BORDER });
     y -= 16;
-    const brutto = r.total || 0;
-    const netto  = brutto / 1.19;
-    const mwst   = brutto - netto;
+    const taxRate = r.taxRate ?? 19;
+    // Prefer stored values; fall back to calculating from total for legacy documents
+    const netto  = typeof r.netAmount === "number" ? r.netAmount : (r.total || 0) / 1.19;
+    const mwst   = typeof r.taxAmount === "number" ? r.taxAmount : (r.total || 0) - netto;
+    const brutto = typeof r.grossAmount === "number" ? r.grossAmount : (r.total || 0);
 
-    const sumRows: [string, string][] = [
-      ["Nettobetrag:", fEur(netto)],
-      ["zzgl. MwSt. 19 %:", fEur(mwst)],
-    ];
-    for (const [label, val] of sumRows) {
-      page.drawText(label, { x: 380, y, size: 9, font: reg, color: C_MUTED });
-      page.drawText(val, { x: width - 40 - reg.widthOfTextAtSize(val, 9), y, size: 9, font: reg, color: C_DARK });
+    if (taxRate === 0) {
+      // Kleinunternehmer — nur Nettobetrag
+      const nettoStr = fEur(netto);
+      page.drawText("Rechnungsbetrag (netto):", { x: 380, y, size: 9, font: reg, color: C_MUTED });
+      page.drawText(nettoStr, { x: width - 40 - reg.widthOfTextAtSize(nettoStr, 9), y, size: 9, font: reg, color: C_DARK });
       y -= 13;
+      page.drawLine({ start: { x: 360, y: y + 4 }, end: { x: width - 40, y: y + 4 }, thickness: 1, color: C_ACCENT });
+      y -= 14;
+      page.drawRectangle({ x: 360, y: y - 6, width: 195, height: 24, color: C_DARK });
+      page.drawText("Gesamtbetrag:", { x: 368, y, size: 9, font: bold, color: C_WHITE });
+      const bruttoStr = fEur(netto);
+      page.drawText(bruttoStr, { x: width - 40 - bold.widthOfTextAtSize(bruttoStr, 11), y: y - 1, size: 11, font: bold, color: C_WHITE });
+      // §19 UStG Hinweis
+      y -= 30;
+      page.drawRectangle({ x: 40, y: y - 8, width: 380, height: 24, color: C_LIGHT });
+      page.drawLine({ start: { x: 40, y: y - 8 }, end: { x: 40, y: y + 16 }, thickness: 2, color: C_ACCENT });
+      page.drawText("Gemäß §19 UStG wird keine Umsatzsteuer berechnet.", { x: 48, y: y + 2, size: 8, font: reg, color: C_DARK });
+    } else {
+      const sumRows: [string, string][] = [
+        ["Nettobetrag:", fEur(netto)],
+        [`zzgl. MwSt. ${taxRate} %:`, fEur(mwst)],
+      ];
+      for (const [label, val] of sumRows) {
+        page.drawText(label, { x: 380, y, size: 9, font: reg, color: C_MUTED });
+        page.drawText(val, { x: width - 40 - reg.widthOfTextAtSize(val, 9), y, size: 9, font: reg, color: C_DARK });
+        y -= 13;
+      }
+      page.drawLine({ start: { x: 360, y: y + 4 }, end: { x: width - 40, y: y + 4 }, thickness: 1, color: C_ACCENT });
+      y -= 14;
+      page.drawRectangle({ x: 360, y: y - 6, width: 195, height: 24, color: C_DARK });
+      page.drawText("Gesamtbetrag brutto:", { x: 368, y, size: 9, font: bold, color: C_WHITE });
+      const bruttoStr = fEur(brutto);
+      page.drawText(bruttoStr, { x: width - 40 - bold.widthOfTextAtSize(bruttoStr, 11), y: y - 1, size: 11, font: bold, color: C_WHITE });
     }
-    page.drawLine({ start: { x: 360, y: y + 4 }, end: { x: width - 40, y: y + 4 }, thickness: 1, color: C_ACCENT });
-    y -= 14;
-    page.drawRectangle({ x: 360, y: y - 6, width: 195, height: 24, color: C_DARK });
-    page.drawText("Gesamtbetrag brutto:", { x: 368, y, size: 9, font: bold, color: C_WHITE });
-    const bruttoStr = fEur(brutto);
-    page.drawText(bruttoStr, { x: width - 40 - bold.widthOfTextAtSize(bruttoStr, 11), y: y - 1, size: 11, font: bold, color: C_WHITE });
 
     // ── § 35a EStG ────────────────────────────────────────────────────────────
     if (lohnNetto > 0) {
@@ -166,16 +215,52 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       page.drawText("Lohnkosten i.H.v. " + fEur(lohnNetto) + " netto sind als haushaltsnahe Dienstleistung absetzbar.", { x: 48, y: y + 3, size: 7.5, font: reg, color: C_DARK });
     }
 
+    // ── Versionshinweis ───────────────────────────────────────────────────────
+    if (r.version && r.version > 1) {
+      y -= 10;
+      page.drawText(`Version ${r.version}`, { x: 40, y, size: 7.5, font: bold, color: C_ACCENT });
+      y -= 4;
+    }
+
+    // ── Digitale Unterschrift ─────────────────────────────────────────────────
+    if (r.signatureImage && typeof r.signatureImage === "string") {
+      try {
+        y -= 28;
+        page.drawLine({ start: { x: 40, y: y + 14 }, end: { x: width - 40, y: y + 14 }, thickness: 0.5, color: C_BORDER });
+        page.drawText("Digitale Unterschrift:", { x: 40, y, size: 8, font: bold, color: C_MUTED });
+        if (r.signedAt) {
+          const sigDate = new Date(r.signedAt).toLocaleString("de-DE");
+          page.drawText("Unterzeichnet am " + sigDate, { x: 40, y: y - 11, size: 7.5, font: reg, color: C_MUTED });
+        }
+        const b64 = r.signatureImage.replace(/^data:image\/png;base64,/, "");
+        const imgBytes = Buffer.from(b64, "base64");
+        const pngImg = await pdfDoc.embedPng(imgBytes);
+        const imgH = 50;
+        const imgW = Math.min(pngImg.width * (imgH / pngImg.height), 200);
+        page.drawImage(pngImg, { x: width - 40 - imgW, y: y - imgH + 8, width: imgW, height: imgH });
+        page.drawLine({ start: { x: width - 40 - imgW, y: y - imgH - 2 }, end: { x: width - 40, y: y - imgH - 2 }, thickness: 0.5, color: C_BORDER });
+        page.drawText("Unterschrift", { x: width - 40 - imgW, y: y - imgH - 12, size: 7, font: reg, color: C_MUTED });
+        y -= imgH + 18;
+      } catch { /* Bild-Fehler ignorieren */ }
+    }
+
     // ── Footer ────────────────────────────────────────────────────────────────
     const fy = 45;
     page.drawLine({ start: { x: 40, y: fy + 22 }, end: { x: width - 40, y: fy + 22 }, thickness: 0.5, color: C_BORDER });
     const bank = r.iban ? "IBAN: " + r.iban + (r.bic ? "  ·  BIC: " + r.bic : "") + (r.bank ? "  ·  Bank: " + r.bank : "") : "";
     const steuer = r.steuernummer ? "St.-Nr.: " + r.steuernummer : "";
-    const zahlung = "Zahlungsziel: " + (r.zahlungsziel || "14 Tage netto");
+    const zahlung = r.status === "bezahlt" && r.paidAt
+      ? "Bezahlt am: " + new Date(r.paidAt).toLocaleDateString("de-DE") + (r.paymentMethod === "stripe" ? " (Stripe)" : "")
+      : "Zahlungsziel: " + (r.zahlungsziel || "14 Tage netto");
     if (bank) page.drawText(bank, { x: 40, y: fy + 10, size: 7.5, font: reg, color: C_MUTED });
     page.drawText([steuer, zahlung].filter(Boolean).join("   \u00B7   "), { x: 40, y: fy, size: 7.5, font: reg, color: C_MUTED });
     const rnText = "Rechnung Nr. " + (r.number || "");
     page.drawText(rnText, { x: width - 40 - reg.widthOfTextAtSize(rnText, 7.5), y: fy, size: 7.5, font: reg, color: C_MUTED });
+    if (r.locked) {
+      const lockNote = "Dieses Dokument wurde digital unterschrieben und ist unveränderbar.";
+      const noteW = reg.widthOfTextAtSize(lockNote, 7);
+      page.drawText(lockNote, { x: (width - noteW) / 2, y: fy - 10, size: 7, font: reg, color: C_MUTED });
+    }
 
     const pdfBytes = await pdfDoc.save();
     return new NextResponse(Buffer.from(pdfBytes), {
@@ -188,4 +273,4 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     console.error(e);
     return NextResponse.json({ error: "PDF-Fehler" }, { status: 500 });
   }
-}
+});

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
+import { withAuth } from "@/lib/withAuth";
+import { getCompanyData } from "@/lib/getCompanyData";
 
 function fDate(iso: string) {
   return new Date(iso).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
@@ -10,12 +12,17 @@ function fEur(v: number) {
   return v.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " \u20AC";
 }
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+type Context = { params: Promise<{ id: string }> };
+
+export const GET = withAuth<Context>(async (_req, userId, { params }) => {
   try {
     const { id } = await params;
     const db = await getDb();
-    const a = await db.collection("angebote").findOne({ _id: new ObjectId(id) });
+    const a = await db.collection("angebote").findOne({ _id: new ObjectId(id), userId });
     if (!a) return NextResponse.json({ error: "Angebot nicht gefunden" }, { status: 404 });
+
+    // Firmendaten aus User-Einstellungen laden
+    const company = await getCompanyData(userId);
 
     const pdfDoc = await PDFDocument.create();
     const page = pdfDoc.addPage([595, 842]);
@@ -35,18 +42,40 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     // ── Dünner Akzentbalken oben ──────────────────────────────────────────────
     page.drawRectangle({ x: 0, y: height - 5, width, height: 5, color: C_ACCENT });
 
-    // ── Firmenname (links) ────────────────────────────────────────────────────
-    const firma = String(a.firmenname || "");
-    const slogan = String(a.firmenslogan || "");
-    if (firma) {
-      page.drawText(firma, { x: 40, y: height - 38, size: 15, font: bold, color: C_DARK });
+    // ── Logo + Firmenname (links) ─────────────────────────────────────────────
+    const firmaName = company.companyName || String(a.firmenname || "");
+    let logoBottomY = height - 38;
+
+    // Logo einbetten falls vorhanden
+    if (company.companyLogoBase64) {
+      try {
+        const b64data = company.companyLogoBase64.replace(/^data:image\/[a-z]+;base64,/, "");
+        const logoBytes = Buffer.from(b64data, "base64");
+        const isJpeg = company.companyLogoBase64.startsWith("data:image/jpeg") || company.companyLogoBase64.startsWith("data:image/jpg");
+        const logoImg = isJpeg ? await pdfDoc.embedJpg(logoBytes) : await pdfDoc.embedPng(logoBytes);
+        const logoH = 32;
+        const logoW = Math.min(logoImg.width * (logoH / logoImg.height), 120);
+        page.drawImage(logoImg, { x: 40, y: height - 38 - logoH + 6, width: logoW, height: logoH });
+        logoBottomY = height - 38 - logoH - 4;
+      } catch { /* Logo-Fehler ignorieren */ }
     }
-    if (slogan) {
-      page.drawText(slogan, { x: 40, y: height - 54, size: 8, font: reg, color: C_MUTED });
+
+    if (firmaName) {
+      page.drawText(firmaName, { x: 40, y: logoBottomY, size: 14, font: bold, color: C_DARK });
+      logoBottomY -= 14;
     }
-    const adresse = [a.firmenStrasse, a.firmenOrt].filter(Boolean).join("  ·  ");
+    const adressParts = [
+      [company.companyAddress, [company.companyZip, company.companyCity].filter(Boolean).join(" ")].filter(Boolean).join(", "),
+      [a.firmenStrasse, a.firmenOrt].filter(Boolean).join("  ·  "),
+    ].filter(Boolean);
+    const adresse = adressParts[0] || "";
     if (adresse) {
-      page.drawText(adresse, { x: 40, y: firma ? height - 66 : height - 38, size: 7.5, font: reg, color: C_MUTED });
+      page.drawText(adresse, { x: 40, y: logoBottomY, size: 7.5, font: reg, color: C_MUTED });
+      logoBottomY -= 12;
+    }
+    const kontakt = [company.companyPhone, company.companyEmail].filter(Boolean).join("  ·  ");
+    if (kontakt) {
+      page.drawText(kontakt, { x: 40, y: logoBottomY, size: 7, font: reg, color: C_MUTED });
     }
 
     // ── Dokumenttyp (rechts) ──────────────────────────────────────────────────
@@ -143,11 +172,47 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     const bruttoStr = fEur(brutto);
     page.drawText(bruttoStr, { x: width - 40 - bold.widthOfTextAtSize(bruttoStr, 11), y: y - 1, size: 11, font: bold, color: C_WHITE });
 
+    // ── Versionshinweis ───────────────────────────────────────────────────────
+    if (a.version && a.version > 1) {
+      y -= 10;
+      page.drawText(`Version ${a.version}`, { x: 40, y, size: 7.5, font: bold, color: C_ACCENT });
+      y -= 4;
+    }
+
+    // ── Digitale Unterschrift ─────────────────────────────────────────────────
+    if (a.signatureImage && typeof a.signatureImage === "string") {
+      try {
+        y -= 28;
+        page.drawLine({ start: { x: 40, y: y + 14 }, end: { x: width - 40, y: y + 14 }, thickness: 0.5, color: C_BORDER });
+        page.drawText("Digitale Unterschrift:", { x: 40, y, size: 8, font: bold, color: C_MUTED });
+        if (a.signedAt) {
+          const sigDate = new Date(a.signedAt).toLocaleString("de-DE");
+          page.drawText("Unterzeichnet am " + sigDate, { x: 40, y: y - 11, size: 7.5, font: reg, color: C_MUTED });
+        }
+        const b64 = a.signatureImage.replace(/^data:image\/png;base64,/, "");
+        const imgBytes = Buffer.from(b64, "base64");
+        const pngImg = await pdfDoc.embedPng(imgBytes);
+        const imgH = 50;
+        const imgW = Math.min(pngImg.width * (imgH / pngImg.height), 200);
+        page.drawImage(pngImg, { x: width - 40 - imgW, y: y - imgH + 8, width: imgW, height: imgH });
+        // Signaturlinie
+        page.drawLine({ start: { x: width - 40 - imgW, y: y - imgH - 2 }, end: { x: width - 40, y: y - imgH - 2 }, thickness: 0.5, color: C_BORDER });
+        page.drawText("Unterschrift", { x: width - 40 - imgW, y: y - imgH - 12, size: 7, font: reg, color: C_MUTED });
+        y -= imgH + 18;
+      } catch { /* Bild-Fehler ignorieren */ }
+    }
+
     // ── Footer ────────────────────────────────────────────────────────────────
     const fy = 45;
     page.drawLine({ start: { x: 40, y: fy + 18 }, end: { x: width - 40, y: fy + 18 }, thickness: 0.5, color: C_BORDER });
     page.drawText("Angebot Nr. " + (a.number || ""), { x: 40, y: fy + 6, size: 7.5, font: reg, color: C_MUTED });
-    page.drawText("Seite 1", { x: width - 40 - reg.widthOfTextAtSize("Seite 1", 7.5), y: fy + 6, size: 7.5, font: reg, color: C_MUTED });
+    const pageRight = "Seite 1";
+    page.drawText(pageRight, { x: width - 40 - reg.widthOfTextAtSize(pageRight, 7.5), y: fy + 6, size: 7.5, font: reg, color: C_MUTED });
+    if (a.locked) {
+      const lockNote = "Dieses Dokument wurde digital unterschrieben und ist unveränderbar.";
+      const noteW = reg.widthOfTextAtSize(lockNote, 7);
+      page.drawText(lockNote, { x: (width - noteW) / 2, y: fy - 8, size: 7, font: reg, color: C_MUTED });
+    }
 
     const pdfBytes = await pdfDoc.save();
     return new NextResponse(Buffer.from(pdfBytes), {
@@ -160,4 +225,4 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     console.error(e);
     return NextResponse.json({ error: "PDF-Fehler" }, { status: 500 });
   }
-}
+});

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { authFetch } from "@/lib/authFetch";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { usePro } from "@/context/ProContext";
 import { useRouter } from "next/navigation";
@@ -16,7 +17,7 @@ export default function DatevPage() {
     setExporting(type);
     setExported(null);
     try {
-      const res = await fetch(`/api/datev/export?type=${type}`);
+      const res = await authFetch(`/api/datev/export?type=${type}`);
       if (!res.ok) throw new Error("Fehler");
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -63,7 +64,7 @@ export default function DatevPage() {
             style={{ background: "linear-gradient(135deg, #f5a623, #c4841c)", color: "#0d1b2e" }}
           >
             <Zap size={16} />
-            Auf Pro upgraden — 9,99€/Monat
+            Jetzt upgraden — ab 19,99€/Monat
           </button>
         </div>
       </DashboardLayout>

@@ -101,7 +101,7 @@ export default function DashboardLayout({ children, title, subtitle }: Dashboard
                 className="px-3 py-1 rounded-lg text-xs font-bold transition-all hover:opacity-90"
                 style={{ background: "linear-gradient(135deg, #f5a623, #c4841c)", color: "#0d1b2e" }}
               >
-                Pro — 9,99€/Monat
+                Jetzt upgraden — ab 19,99€
               </button>
               <button
                 onClick={() => setBannerDismissed(true)}

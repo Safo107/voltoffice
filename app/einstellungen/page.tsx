@@ -19,6 +19,8 @@ import {
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
+import { usePro } from "@/context/ProContext";
+import { authFetch } from "@/lib/authFetch";
 
 const sections = [
   { id: "profil", label: "Profil & Betrieb", icon: <User size={16} />, color: "#00c6ff" },
@@ -49,7 +51,9 @@ function inputStyle(focused = false) {
 export default function EinstellungenPage() {
   const router = useRouter();
   const { user } = useAuth();
+  const { isPro, isTrial, trialDaysLeft, tier, loadingPro, hasStripeCustomer, lastPaymentFailed, proSince, refreshPro } = usePro();
   const [active, setActive] = useState("profil");
+  const [portalLoading, setPortalLoading] = useState(false);
 
   // Profil
   const [companyName, setCompanyName] = useState("Musterbetrieb GmbH");
@@ -59,15 +63,20 @@ export default function EinstellungenPage() {
 
   // Firmendaten
   const [firma, setFirma] = useState({
-    name: "Musterbetrieb GmbH",
+    name: "",
     ustId: "",
     handelsreg: "",
-    street: "Musterstraße 1",
-    zip: "10115",
-    city: "Berlin",
+    street: "",
+    zip: "",
+    city: "",
     website: "",
+    phone: "",
+    companyEmail: "",
   });
   const [firmaSaved, setFirmaSaved] = useState(false);
+  const [firmaLoading, setFirmaLoading] = useState(false);
+  const [firmaLogo, setFirmaLogo] = useState<string | null>(null);
+  const [logoUploading, setLogoUploading] = useState(false);
 
   // Benachrichtigungen
   const [notif, setNotif] = useState({
@@ -94,6 +103,94 @@ export default function EinstellungenPage() {
   const [twoFaError, setTwoFaError] = useState("");
   const [backupCodes, setBackupCodes] = useState<string[]>([]);
   const [disableToken, setDisableToken] = useState("");
+
+  const openPortal = async () => {
+    setPortalLoading(true);
+    try {
+      const res = await authFetch("/api/stripe/customer-portal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ returnUrl: window.location.href }),
+      });
+      const data = await res.json();
+      if (res.ok && data.url) {
+        window.location.href = data.url;
+      } else {
+        alert(data.error || "Portal konnte nicht geöffnet werden.");
+      }
+    } catch {
+      alert("Verbindungsfehler. Bitte erneut versuchen.");
+    } finally {
+      setPortalLoading(false);
+    }
+  };
+
+  // Firmendaten laden
+  useEffect(() => {
+    if (!user) return;
+    authFetch("/api/settings/company")
+      .then((r) => r.json())
+      .then((d) => {
+        setFirma({
+          name:         d.companyName    || "",
+          ustId:        d.vatId          || "",
+          handelsreg:   d.taxNumber      || "",
+          street:       d.companyAddress || "",
+          zip:          d.companyZip     || "",
+          city:         d.companyCity    || "",
+          website:      d.companyWebsite || "",
+          phone:        d.companyPhone   || "",
+          companyEmail: d.companyEmail   || "",
+        });
+        setFirmaLogo(d.companyLogoBase64 || null);
+      })
+      .catch(() => {});
+  }, [user]);
+
+  const saveFirma = async () => {
+    setFirmaLoading(true);
+    try {
+      await authFetch("/api/settings/company", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyName:    firma.name,
+          companyAddress: firma.street,
+          companyZip:     firma.zip,
+          companyCity:    firma.city,
+          companyPhone:   firma.phone,
+          companyEmail:   firma.companyEmail,
+          companyWebsite: firma.website,
+          taxNumber:      firma.handelsreg,
+          vatId:          firma.ustId,
+        }),
+      });
+      save(setFirmaSaved);
+    } catch {
+      alert("Speichern fehlgeschlagen.");
+    } finally {
+      setFirmaLoading(false);
+    }
+  };
+
+  const uploadLogo = async (file: File) => {
+    setLogoUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("logo", file);
+      const res = await authFetch("/api/upload/logo", { method: "POST", body: fd });
+      const data = await res.json();
+      if (res.ok) {
+        setFirmaLogo(data.logoUrl);
+      } else {
+        alert(data.error || "Upload fehlgeschlagen.");
+      }
+    } catch {
+      alert("Upload fehlgeschlagen.");
+    } finally {
+      setLogoUploading(false);
+    }
+  };
 
   useEffect(() => {
     if (user?.uid) {
@@ -274,109 +371,133 @@ export default function EinstellungenPage() {
 
           {/* ── Firmendaten ── */}
           {active === "firma" && (
-            <div className="rounded-xl p-6" style={{ background: "#112240", border: "1px solid #1e3a5f" }}>
-              <h2 className="text-base font-bold mb-5" style={{ color: "#e6edf3", fontFamily: "var(--font-syne)" }}>
-                Firmendaten
-              </h2>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Firmenname</label>
-                  <input
-                    value={firma.name}
-                    onChange={(e) => setFirma({ ...firma, name: e.target.value })}
-                    placeholder="Musterbetrieb GmbH"
-                    className="w-full px-4 py-3 rounded-xl text-sm outline-none"
-                    style={inputStyle()}
-                    onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
-                    onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>USt-IdNr.</label>
-                    <input
-                      value={firma.ustId}
-                      onChange={(e) => setFirma({ ...firma, ustId: e.target.value })}
-                      placeholder="DE123456789"
-                      className="w-full px-4 py-3 rounded-xl text-sm outline-none"
-                      style={inputStyle()}
-                      onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
-                      onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Handelsregister-Nr.</label>
-                    <input
-                      value={firma.handelsreg}
-                      onChange={(e) => setFirma({ ...firma, handelsreg: e.target.value })}
-                      placeholder="HRB 12345"
-                      className="w-full px-4 py-3 rounded-xl text-sm outline-none"
-                      style={inputStyle()}
-                      onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
-                      onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Straße & Hausnummer</label>
-                  <input
-                    value={firma.street}
-                    onChange={(e) => setFirma({ ...firma, street: e.target.value })}
-                    placeholder="Musterstraße 1"
-                    className="w-full px-4 py-3 rounded-xl text-sm outline-none"
-                    style={inputStyle()}
-                    onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
-                    onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>PLZ</label>
-                    <input
-                      value={firma.zip}
-                      onChange={(e) => setFirma({ ...firma, zip: e.target.value })}
-                      placeholder="10115"
-                      className="w-full px-4 py-3 rounded-xl text-sm outline-none"
-                      style={inputStyle()}
-                      onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
-                      onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Stadt</label>
-                    <input
-                      value={firma.city}
-                      onChange={(e) => setFirma({ ...firma, city: e.target.value })}
-                      placeholder="Berlin"
-                      className="w-full px-4 py-3 rounded-xl text-sm outline-none"
-                      style={inputStyle()}
-                      onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
-                      onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Webseite</label>
-                  <input
-                    value={firma.website}
-                    onChange={(e) => setFirma({ ...firma, website: e.target.value })}
-                    placeholder="https://musterbetrieb.de"
-                    type="url"
-                    className="w-full px-4 py-3 rounded-xl text-sm outline-none"
-                    style={inputStyle()}
-                    onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
-                    onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
-                  />
-                </div>
-                <div className="flex items-center gap-4 pt-1">
-                  <button
-                    onClick={() => save(setFirmaSaved)}
-                    className="px-5 py-2.5 rounded-xl text-sm font-semibold transition-all hover:opacity-90"
-                    style={{ background: "linear-gradient(135deg, #f5a623, #c4841c)", color: "#0d1b2e" }}
+            <div className="space-y-4">
+              {/* Logo */}
+              <div className="rounded-xl p-5" style={{ background: "#112240", border: "1px solid #1e3a5f" }}>
+                <h3 className="text-sm font-semibold mb-4" style={{ color: "#e6edf3" }}>Firmenlogo</h3>
+                <div className="flex items-center gap-4">
+                  <div
+                    className="flex items-center justify-center rounded-xl overflow-hidden shrink-0"
+                    style={{ width: 80, height: 80, background: "#0d1b2e", border: "1px solid #1e3a5f" }}
                   >
-                    Firmendaten speichern
-                  </button>
-                  <SaveFeedback visible={firmaSaved} />
+                    {firmaLogo ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={firmaLogo} alt="Logo" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+                    ) : (
+                      <Building size={28} style={{ color: "#1e3a5f" }} />
+                    )}
+                  </div>
+                  <div>
+                    <label
+                      className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold cursor-pointer transition-all hover:opacity-90"
+                      style={{ background: firmaLogo ? "#1e3a5f" : "linear-gradient(135deg, #00c6ff, #0099cc)", color: firmaLogo ? "#8b9ab5" : "#0d1b2e", display: "inline-flex" }}
+                    >
+                      {logoUploading ? <Loader size={14} className="animate-spin" /> : <Building size={14} />}
+                      {logoUploading ? "Wird hochgeladen…" : firmaLogo ? "Logo ändern" : "Logo hochladen"}
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        className="hidden"
+                        onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadLogo(f); }}
+                      />
+                    </label>
+                    <p className="text-xs mt-1.5" style={{ color: "#4a5568" }}>PNG, JPG oder WebP · max. 200 KB</p>
+                    {firmaLogo && (
+                      <button
+                        onClick={async () => {
+                          await authFetch("/api/settings/company", {
+                            method: "PUT",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ companyLogoBase64: "" }),
+                          });
+                          setFirmaLogo(null);
+                        }}
+                        className="text-xs mt-1 transition-all"
+                        style={{ color: "#ef4444" }}
+                      >
+                        Logo entfernen
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Stammdaten */}
+              <div className="rounded-xl p-6" style={{ background: "#112240", border: "1px solid #1e3a5f" }}>
+                <h3 className="text-sm font-semibold mb-5" style={{ color: "#e6edf3" }}>Stammdaten</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Firmenname *</label>
+                    <input value={firma.name} onChange={(e) => setFirma({ ...firma, name: e.target.value })}
+                      placeholder="Muster Elektro GmbH" className="w-full px-4 py-3 rounded-xl text-sm outline-none"
+                      style={inputStyle()} onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }} onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>E-Mail</label>
+                      <input type="email" value={firma.companyEmail} onChange={(e) => setFirma({ ...firma, companyEmail: e.target.value })}
+                        placeholder="info@musterbetrieb.de" className="w-full px-4 py-3 rounded-xl text-sm outline-none"
+                        style={inputStyle()} onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }} onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Telefon</label>
+                      <input type="tel" value={firma.phone} onChange={(e) => setFirma({ ...firma, phone: e.target.value })}
+                        placeholder="030 12345678" className="w-full px-4 py-3 rounded-xl text-sm outline-none"
+                        style={inputStyle()} onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }} onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }} />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Straße & Hausnummer</label>
+                    <input value={firma.street} onChange={(e) => setFirma({ ...firma, street: e.target.value })}
+                      placeholder="Musterstraße 1" className="w-full px-4 py-3 rounded-xl text-sm outline-none"
+                      style={inputStyle()} onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }} onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>PLZ</label>
+                      <input value={firma.zip} onChange={(e) => setFirma({ ...firma, zip: e.target.value })}
+                        placeholder="10115" className="w-full px-4 py-3 rounded-xl text-sm outline-none"
+                        style={inputStyle()} onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }} onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Stadt</label>
+                      <input value={firma.city} onChange={(e) => setFirma({ ...firma, city: e.target.value })}
+                        placeholder="Berlin" className="w-full px-4 py-3 rounded-xl text-sm outline-none"
+                        style={inputStyle()} onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }} onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }} />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>USt-IdNr.</label>
+                      <input value={firma.ustId} onChange={(e) => setFirma({ ...firma, ustId: e.target.value })}
+                        placeholder="DE123456789" className="w-full px-4 py-3 rounded-xl text-sm outline-none"
+                        style={inputStyle()} onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }} onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Steuernummer</label>
+                      <input value={firma.handelsreg} onChange={(e) => setFirma({ ...firma, handelsreg: e.target.value })}
+                        placeholder="12/345/67890" className="w-full px-4 py-3 rounded-xl text-sm outline-none"
+                        style={inputStyle()} onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }} onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }} />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Webseite</label>
+                    <input type="url" value={firma.website} onChange={(e) => setFirma({ ...firma, website: e.target.value })}
+                      placeholder="https://musterbetrieb.de" className="w-full px-4 py-3 rounded-xl text-sm outline-none"
+                      style={inputStyle()} onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }} onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }} />
+                  </div>
+                  <div className="flex items-center gap-4 pt-1">
+                    <button
+                      onClick={saveFirma}
+                      disabled={firmaLoading}
+                      className="px-5 py-2.5 rounded-xl text-sm font-semibold transition-all hover:opacity-90 disabled:opacity-50 flex items-center gap-2"
+                      style={{ background: "linear-gradient(135deg, #f5a623, #c4841c)", color: "#0d1b2e" }}
+                    >
+                      {firmaLoading && <Loader size={14} className="animate-spin" />}
+                      Firmendaten speichern
+                    </button>
+                    <SaveFeedback visible={firmaSaved} />
+                  </div>
                 </div>
               </div>
             </div>
@@ -647,74 +768,145 @@ export default function EinstellungenPage() {
           {/* ── Abo ── */}
           {active === "abo" && (
             <div className="space-y-4">
+
+              {/* Zahlung fehlgeschlagen Banner */}
+              {lastPaymentFailed && (
+                <div className="flex items-start gap-3 p-4 rounded-xl" style={{ background: "#ef444410", border: "1px solid #ef444433" }}>
+                  <AlertCircle size={16} style={{ color: "#ef4444", marginTop: 1, flexShrink: 0 }} />
+                  <div>
+                    <p className="text-sm font-semibold" style={{ color: "#ef4444" }}>Zahlung fehlgeschlagen</p>
+                    <p className="text-xs mt-0.5" style={{ color: "#8b9ab5" }}>
+                      Die letzte Zahlung konnte nicht verarbeitet werden.
+                      Bitte Zahlungsmethode im Kundenportal aktualisieren.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Aktueller Plan */}
               <div className="rounded-xl p-5" style={{ background: "#112240", border: "1px solid #1e3a5f" }}>
                 <h2 className="text-base font-bold mb-4" style={{ color: "#e6edf3", fontFamily: "var(--font-syne)" }}>
                   Aktueller Plan
                 </h2>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-2xl font-bold mb-1" style={{ color: "#e6edf3", fontFamily: "var(--font-syne)" }}>
-                      Free
-                    </p>
-                    <p className="text-sm" style={{ color: "#8b9ab5" }}>
-                      Kostenlos — max. 5 Kunden, 3 Angebote, 3 Projekte
-                    </p>
+
+                {loadingPro ? (
+                  <div className="flex items-center gap-2 py-2">
+                    <Loader size={16} className="animate-spin" style={{ color: "#00c6ff" }} />
+                    <span className="text-sm" style={{ color: "#8b9ab5" }}>Wird geladen…</span>
                   </div>
-                  <span
-                    className="px-3 py-1 rounded-full text-xs font-semibold"
-                    style={{ background: "#1e3a5f", color: "#8b9ab5" }}
-                  >
-                    Aktuell
-                  </span>
-                </div>
+                ) : (
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        {(tier === "pro" || tier === "business") && <Zap size={16} style={{ color: "#f5a623" }} />}
+                        <p className="text-2xl font-bold" style={{ color: "#e6edf3", fontFamily: "var(--font-syne)" }}>
+                          {tier === "business" ? "Business" : tier === "pro" ? "Pro" : tier === "trial" ? "Trial" : "Free"}
+                        </p>
+                        <span
+                          className="px-2 py-0.5 rounded-full text-xs font-semibold"
+                          style={{
+                            background: (tier === "pro" || tier === "business") ? "#f5a62322" : tier === "trial" ? "#00c6ff22" : "#1e3a5f",
+                            color: (tier === "pro" || tier === "business") ? "#f5a623" : tier === "trial" ? "#00c6ff" : "#8b9ab5",
+                          }}
+                        >
+                          Aktiv
+                        </span>
+                      </div>
+                      <p className="text-sm" style={{ color: "#8b9ab5" }}>
+                        {(tier === "pro" || tier === "business") && proSince
+                          ? `${tier === "business" ? "Business" : "Pro"} seit ${new Date(proSince).toLocaleDateString("de-DE")}`
+                          : tier === "trial"
+                          ? `Trial — noch ${trialDaysLeft} ${trialDaysLeft === 1 ? "Tag" : "Tage"}`
+                          : "Kostenlos — max. 5 Kunden, 3 Angebote, 3 Projekte"}
+                      </p>
+                      {(tier === "pro" || tier === "business") && (
+                        <p className="text-sm font-semibold mt-1" style={{ color: "#f5a623" }}>
+                          {tier === "business" ? "29,99 € / Monat" : "19,99 € / Monat"}
+                        </p>
+                      )}
+                    </div>
+                    {(tier === "pro" || tier === "business") && (
+                      <button
+                        onClick={openPortal}
+                        disabled={portalLoading || !hasStripeCustomer}
+                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all hover:opacity-90 disabled:opacity-50 shrink-0"
+                        style={{ background: "linear-gradient(135deg, #00c6ff, #0099cc)", color: "#0d1b2e" }}
+                      >
+                        {portalLoading ? <Loader size={14} className="animate-spin" /> : <CreditCard size={14} />}
+                        {portalLoading ? "Wird geöffnet…" : "Abo verwalten"}
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
 
-              <div
-                className="rounded-xl p-5"
-                style={{ background: "linear-gradient(135deg, #f5a62310, #112240)", border: "1px solid #f5a62344" }}
-              >
-                <div className="flex items-start justify-between mb-4">
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <Zap size={18} style={{ color: "#f5a623" }} />
-                      <span className="text-xl font-bold" style={{ color: "#e6edf3", fontFamily: "var(--font-syne)" }}>
-                        Pro
-                      </span>
-                    </div>
-                    <p className="text-sm" style={{ color: "#8b9ab5" }}>Alles unlimitiert + alle Pro-Features</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-2xl font-bold" style={{ color: "#f5a623", fontFamily: "var(--font-syne)" }}>9,99 €</p>
-                    <p className="text-xs" style={{ color: "#8b9ab5" }}>/Monat</p>
+              {/* Portal Info (Pro-User) */}
+              {!loadingPro && (tier === "pro" || tier === "business") && (
+                <div className="rounded-xl p-4" style={{ background: "#0d1b2e", border: "1px solid #1e3a5f" }}>
+                  <p className="text-xs font-semibold mb-2" style={{ color: "#8b9ab5" }}>Im Kundenportal kannst du:</p>
+                  <div className="grid grid-cols-2 gap-y-1.5">
+                    {[
+                      "Abo kündigen oder ändern",
+                      "Zahlungsmethode aktualisieren",
+                      "Rechnungen herunterladen",
+                      "Rechnungsadresse anpassen",
+                    ].map((f) => (
+                      <div key={f} className="flex items-center gap-2 text-xs" style={{ color: "#e6edf3" }}>
+                        <Check size={11} style={{ color: "#22c55e" }} />
+                        {f}
+                      </div>
+                    ))}
                   </div>
                 </div>
+              )}
 
-                <div className="grid grid-cols-2 gap-y-2 mb-5">
-                  {[
-                    "Unbegrenzte Kunden",
-                    "Unbegrenzte Angebote",
-                    "Rechnungen erstellen",
-                    "PDF-Export",
-                    "DATEV-Export (CSV)",
-                    "Mitarbeiterverwaltung",
-                    "Zeiterfassung & Auswertungen",
-                    "VDE-Rechner",
-                  ].map((f) => (
-                    <div key={f} className="flex items-center gap-2 text-xs" style={{ color: "#e6edf3" }}>
-                      <Check size={12} style={{ color: "#22c55e" }} />
-                      {f}
-                    </div>
-                  ))}
-                </div>
-
-                <button
-                  onClick={() => router.push("/upgrade")}
-                  className="w-full py-3 rounded-xl text-sm font-semibold transition-all hover:opacity-90"
-                  style={{ background: "linear-gradient(135deg, #f5a623, #c4841c)", color: "#0d1b2e" }}
+              {/* Upgrade Card (Free / Trial — not shown for paying customers) */}
+              {!loadingPro && tier !== "pro" && tier !== "business" && (
+                <div
+                  className="rounded-xl p-5"
+                  style={{ background: "linear-gradient(135deg, #f5a62310, #112240)", border: "1px solid #f5a62344" }}
                 >
-                  Jetzt auf Pro upgraden
-                </button>
-              </div>
+                  <div className="flex items-start justify-between mb-4">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <Zap size={18} style={{ color: "#f5a623" }} />
+                        <span className="text-xl font-bold" style={{ color: "#e6edf3", fontFamily: "var(--font-syne)" }}>Pro</span>
+                      </div>
+                      <p className="text-sm" style={{ color: "#8b9ab5" }}>Alles unlimitiert + alle Pro-Features</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-2xl font-bold" style={{ color: "#f5a623", fontFamily: "var(--font-syne)" }}>19,99 €</p>
+                      <p className="text-xs" style={{ color: "#8b9ab5" }}>/Monat · 14 Tage gratis</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-y-2 mb-5">
+                    {[
+                      "Unbegrenzte Kunden",
+                      "Unbegrenzte Angebote",
+                      "Rechnungen erstellen",
+                      "PDF-Export",
+                      "DATEV-Export (CSV)",
+                      "Mitarbeiterverwaltung",
+                      "Zeiterfassung & Auswertungen",
+                      "VDE-Rechner",
+                    ].map((f) => (
+                      <div key={f} className="flex items-center gap-2 text-xs" style={{ color: "#e6edf3" }}>
+                        <Check size={12} style={{ color: "#22c55e" }} />
+                        {f}
+                      </div>
+                    ))}
+                  </div>
+
+                  <button
+                    onClick={() => router.push("/upgrade")}
+                    className="w-full py-3 rounded-xl text-sm font-semibold transition-all hover:opacity-90"
+                    style={{ background: "linear-gradient(135deg, #f5a623, #c4841c)", color: "#0d1b2e" }}
+                  >
+                    Jetzt auf Pro upgraden
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { authFetch } from "@/lib/authFetch";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Modal from "@/components/ui/Modal";
 import { usePro } from "@/context/ProContext";
@@ -140,7 +141,7 @@ export default function ZeiterfassungPage() {
   const fetchEntries = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/zeiterfassung");
+      const res = await authFetch("/api/zeiterfassung");
       const data = await res.json();
       setEntries(Array.isArray(data) ? data : []);
     } catch { setEntries([]); }
@@ -149,7 +150,7 @@ export default function ZeiterfassungPage() {
 
   const fetchProjekte = async () => {
     try {
-      const res = await fetch("/api/projekte");
+      const res = await authFetch("/api/projekte");
       const data = await res.json();
       const list: Projekt[] = Array.isArray(data) ? data : [];
       setProjekte(list);
@@ -169,7 +170,7 @@ export default function ZeiterfassungPage() {
 
   const fetchMitarbeiter = async () => {
     try {
-      const res = await fetch("/api/mitarbeiter");
+      const res = await authFetch("/api/mitarbeiter");
       const data = await res.json();
       const list: MitarbeiterEintrag[] = Array.isArray(data) ? data.filter((m: MitarbeiterEintrag) => m.aktiv) : [];
       setMitarbeiterListe(list);
@@ -235,7 +236,7 @@ export default function ZeiterfassungPage() {
   const handleSaveEntry = async (form: Omit<TimeEntry, "_id">, onDone: () => void) => {
     setSaving(true);
     try {
-      const res = await fetch("/api/zeiterfassung", {
+      const res = await authFetch("/api/zeiterfassung", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
@@ -248,7 +249,7 @@ export default function ZeiterfassungPage() {
   const handleDelete = async (entry: TimeEntry) => {
     if (!confirm("Eintrag löschen?")) return;
     try {
-      await fetch(`/api/zeiterfassung/${entry._id}`, { method: "DELETE" });
+      await authFetch(`/api/zeiterfassung/${entry._id}`, { method: "DELETE" });
       await fetchEntries();
     } catch { /* */ }
   };
@@ -298,7 +299,7 @@ export default function ZeiterfassungPage() {
         };
       });
       const total = items.reduce((s, i) => s + i.gesamt, 0);
-      const res = await fetch("/api/rechnungen", {
+      const res = await authFetch("/api/rechnungen", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -365,7 +366,7 @@ export default function ZeiterfassungPage() {
           <button onClick={() => router.push("/upgrade")}
             className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold hover:opacity-90"
             style={{ background: "linear-gradient(135deg, #f5a623, #c4841c)", color: "#0d1b2e" }}>
-            <Zap size={16} />Auf Pro upgraden — 9,99€/Monat
+            <Zap size={16} />Jetzt upgraden — ab 19,99€/Monat
           </button>
         </div>
       </DashboardLayout>

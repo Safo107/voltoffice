@@ -1,9 +1,14 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { authFetch } from "@/lib/authFetch";
+import { usePro } from "@/context/ProContext";
+import { getPlanLimits } from "@/lib/planLimits";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Modal from "@/components/ui/Modal";
 import EmptyState from "@/components/ui/EmptyState";
+import UpgradeModal from "@/components/ui/UpgradeModal";
+import PlanLimitBar from "@/components/ui/PlanLimitBar";
 import {
   Users,
   Plus,
@@ -30,7 +35,6 @@ interface Customer {
   createdAt?: string;
 }
 
-const FREE_LIMIT = 5;
 const EMPTY_FORM: Omit<Customer, "_id" | "createdAt"> = {
   name: "",
   email: "",
@@ -41,6 +45,10 @@ const EMPTY_FORM: Omit<Customer, "_id" | "createdAt"> = {
 };
 
 export default function KundenPage() {
+  const { plan } = usePro();
+  const limits = getPlanLimits(plan);
+  const kundenLimit = limits.kunden === Infinity ? -1 : limits.kunden;
+
   const [kunden, setKunden] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -49,6 +57,7 @@ export default function KundenPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
 
   useEffect(() => {
     fetchKunden();
@@ -64,7 +73,7 @@ export default function KundenPage() {
   const fetchKunden = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/kunden");
+      const res = await authFetch("/api/kunden");
       if (!res.ok) throw new Error(`Fehler ${res.status}`);
       const data = await res.json();
       setKunden(Array.isArray(data) ? data : []);
@@ -101,17 +110,22 @@ export default function KundenPage() {
     try {
       if (editKunde) {
         const id = editKunde._id || editKunde.id;
-        await fetch(`/api/kunden/${id}`, {
+        await authFetch(`/api/kunden/${id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(form),
         });
       } else {
-        await fetch("/api/kunden", {
+        const res = await authFetch("/api/kunden", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(form),
         });
+        if (res.status === 403) {
+          setModalOpen(false);
+          setUpgradeOpen(true);
+          return;
+        }
       }
       await fetchKunden();
       setModalOpen(false);
@@ -126,7 +140,7 @@ export default function KundenPage() {
     if (!confirm(`Kunde "${kunde.name}" wirklich löschen?`)) return;
     const id = kunde._id || kunde.id;
     try {
-      await fetch(`/api/kunden/${id}`, { method: "DELETE" });
+      await authFetch(`/api/kunden/${id}`, { method: "DELETE" });
       await fetchKunden();
     } catch {
       //
@@ -139,10 +153,14 @@ export default function KundenPage() {
       c.name.toLowerCase().includes(search.toLowerCase()) ||
       c.email.toLowerCase().includes(search.toLowerCase())
   );
-  const atLimit = kunden.length >= FREE_LIMIT;
+  const atLimit = kundenLimit !== -1 && kunden.length >= kundenLimit;
+  const subtitle = kundenLimit === -1
+    ? `${kunden.length} Kunden`
+    : `${kunden.length} von ${kundenLimit} Kunden`;
 
   return (
-    <DashboardLayout title="Kunden" subtitle={`${kunden.length} von ${FREE_LIMIT} Kunden (Free)`}>
+    <DashboardLayout title="Kunden" subtitle={subtitle}>
+      <UpgradeModal open={upgradeOpen} onClose={() => setUpgradeOpen(false)} resource="kunden" limit={kundenLimit === -1 ? undefined : kundenLimit} />
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div
@@ -161,32 +179,22 @@ export default function KundenPage() {
         </div>
 
         <button
-          onClick={openNew}
-          disabled={atLimit}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ml-3 disabled:cursor-not-allowed"
+          onClick={atLimit ? () => setUpgradeOpen(true) : openNew}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ml-3"
           style={{
-            background: atLimit
-              ? "#1e3a5f"
-              : "linear-gradient(135deg, #00c6ff, #0099cc)",
-            color: atLimit ? "#4a5568" : "#0d1b2e",
+            background: atLimit ? "#f5a62322" : "linear-gradient(135deg, #00c6ff, #0099cc)",
+            color: atLimit ? "#f5a623" : "#0d1b2e",
+            border: atLimit ? "1px solid #f5a62344" : "none",
           }}
-          title={atLimit ? "Free-Limit: max. 5 Kunden" : undefined}
         >
           <Plus size={16} />
-          Neuer Kunde
+          {atLimit ? "Limit erreicht — Upgrade" : "Neuer Kunde"}
         </button>
       </div>
 
-      {atLimit && (
-        <div
-          className="flex items-start gap-3 p-4 rounded-xl mb-4"
-          style={{ background: "#f5a62310", border: "1px solid #f5a62333" }}
-        >
-          <AlertCircle size={16} style={{ color: "#f5a623", marginTop: 1 }} />
-          <p className="text-sm" style={{ color: "#e6edf3" }}>
-            <span style={{ color: "#f5a623", fontWeight: 600 }}>Free-Limit erreicht.</span>{" "}
-            Upgraden Sie auf Pro für unbegrenzte Kunden.
-          </p>
+      {kundenLimit !== -1 && (
+        <div className="mb-4">
+          <PlanLimitBar label="Kunden" count={kunden.length} limit={kundenLimit} />
         </div>
       )}
 
@@ -314,22 +322,6 @@ export default function KundenPage() {
           })}
         </div>
       )}
-
-      {/* Progress bar */}
-      <div className="mt-4 flex items-center gap-3">
-        <div className="flex-1 h-1.5 rounded-full" style={{ background: "#1e3a5f" }}>
-          <div
-            className="h-1.5 rounded-full transition-all"
-            style={{
-              width: `${Math.min((kunden.length / FREE_LIMIT) * 100, 100)}%`,
-              background: kunden.length >= FREE_LIMIT ? "#f5a623" : "#00c6ff",
-            }}
-          />
-        </div>
-        <span className="text-xs" style={{ color: "#8b9ab5" }}>
-          {kunden.length}/{FREE_LIMIT} Kunden (Free)
-        </span>
-      </div>
 
       {/* Modal */}
       <Modal

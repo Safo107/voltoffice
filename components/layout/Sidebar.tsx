@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Users, FileText, Briefcase, Clock,
   Receipt, FileDown, Database, UserCheck, Calculator,
   Zap, Settings, ChevronRight, Lock, Crown,
-  ChevronLeft, PanelLeftClose, PanelLeftOpen,
+  ChevronLeft, PanelLeftClose, PanelLeftOpen, TrendingUp,
 } from "lucide-react";
 import { usePro } from "@/context/ProContext";
 
@@ -28,6 +28,7 @@ const freeItems: NavItem[] = [
 
 const proItems: NavItem[] = [
   { label: "Rechnungen", href: "/rechnungen", icon: <Receipt size={18} />, pro: true },
+  { label: "Finanzen", href: "/finance", icon: <TrendingUp size={18} />, pro: true },
   { label: "PDF-Export", href: "/export", icon: <FileDown size={18} />, pro: true },
   { label: "DATEV-Export", href: "/datev", icon: <Database size={18} />, pro: true },
   { label: "Mitarbeiter", href: "/mitarbeiter", icon: <UserCheck size={18} />, pro: true },
@@ -131,10 +132,10 @@ export default function Sidebar() {
               </p>
               <p className="text-xs" style={{ color: "#8b9ab5" }}>ElektroGenius</p>
             </div>
-            {tier === "pro" && (
+            {(tier === "pro" || tier === "business") && (
               <span className="text-xs font-bold px-1.5 py-0.5 rounded shrink-0"
                 style={{ background: "rgba(245,166,35,0.2)", color: "#f5a623", border: "1px solid rgba(245,166,35,0.4)" }}>
-                PRO
+                {tier === "business" ? "BIZ" : "PRO"}
               </span>
             )}
             {isTrial && (
@@ -172,9 +173,9 @@ export default function Sidebar() {
         <div className="mt-6">
           {!collapsed && (
             <div className="flex items-center gap-2 px-3 mb-2">
-              {tier === "pro" && <Crown size={12} style={{ color: "#f5a623" }} />}
+              {(tier === "pro" || tier === "business") && <Crown size={12} style={{ color: "#f5a623" }} />}
               <span className="text-xs font-semibold uppercase tracking-wider"
-                style={{ color: tier === "pro" ? "#f5a623" : "#8b9ab5" }}>
+                style={{ color: (tier === "pro" || tier === "business") ? "#f5a623" : "#8b9ab5" }}>
                 Pro Features
               </span>
             </div>
@@ -209,7 +210,7 @@ export default function Sidebar() {
             <button onClick={() => router.push("/upgrade")}
               className="w-full py-1.5 rounded-lg text-xs font-semibold transition-all hover:opacity-90"
               style={{ background: "linear-gradient(135deg, #f5a623, #c4841c)", color: "#0d1b2e" }}>
-              Pro — 9,99€/Monat
+              Pro — 19,99€/Monat
             </button>
           </div>
         </div>
@@ -231,7 +232,7 @@ export default function Sidebar() {
             <button onClick={() => router.push("/upgrade")}
               className="w-full py-1.5 rounded-lg text-xs font-semibold transition-all hover:opacity-90"
               style={{ background: "linear-gradient(135deg, #f5a623, #c4841c)", color: "#0d1b2e" }}>
-              Jetzt upgraden — 9,99€/Monat
+              Jetzt upgraden — ab 19,99€/Monat
             </button>
           </div>
         </div>

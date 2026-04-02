@@ -59,7 +59,7 @@ export default function VoltBasePage() {
             style={{ background: "linear-gradient(135deg, #f5a623, #c4841c)", color: "#0d1b2e" }}
           >
             <Zap size={16} />
-            Auf Pro upgraden — 9,99€/Monat
+            Jetzt upgraden — ab 19,99€/Monat
           </button>
           <a
             href="https://lernportal.elektrogenius.de"

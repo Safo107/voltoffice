@@ -1,18 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
+import { withAuth } from "@/lib/withAuth";
+import { getPlanLimits } from "@/lib/planLimits";
+import { getUserPlan } from "@/lib/getUserPlan";
 
-export async function GET(req: NextRequest) {
+export const GET = withAuth(async (req, userId) => {
   try {
+    console.log("[dashboard] UID:", userId);
     const db = await getDb();
+    const plan = await getUserPlan(db, userId);
+    const limits = getPlanLimits(plan);
     const { searchParams } = new URL(req.url);
     const period = searchParams.get("period") || "all"; // all | month | week
 
     const [kunden, angebote, projekte, zeiteintraege, rechnungen] = await Promise.all([
-      db.collection("kunden").countDocuments(),
-      db.collection("angebote").find({ status: { $in: ["draft", "sent"] } }).toArray(),
-      db.collection("projekte").countDocuments({ status: "active" }),
-      db.collection("zeiterfassung").find({}).toArray(),
-      db.collection("rechnungen").find({}).toArray(),
+      db.collection("kunden").countDocuments({ userId }),
+      db.collection("angebote").find({ userId, status: { $in: ["draft", "sent"] } }).toArray(),
+      db.collection("projekte").countDocuments({ userId, status: "active" }),
+      db.collection("zeiterfassung").find({ userId }).toArray(),
+      db.collection("rechnungen").find({ userId }).toArray(),
     ]);
 
     // Zeit-Filter
@@ -49,6 +55,15 @@ export async function GET(req: NextRequest) {
     const openInvoicesTotal = openInvoices.reduce((sum, r) => sum + (r.total || 0), 0);
     const openInvoicesCount = openInvoices.length;
 
+    // Monatliche Einnahmen (bezahlt)
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    const monthlyRevenue = rechnungen
+      .filter((r) => r.status === "bezahlt" && r.updatedAt && new Date(r.updatedAt) >= monthStart)
+      .reduce((sum, r) => sum + (r.total || 0), 0);
+    const paidInvoicesCount = rechnungen.filter((r) => r.status === "bezahlt").length;
+    const overdueInvoicesCount = rechnungen.filter((r) => r.status === "überfällig").length;
+    const paidTotal = rechnungen.filter((r) => r.status === "bezahlt").reduce((sum, r) => sum + (r.total || 0), 0);
+
     // Gesamtstunden (period-filtered)
     const totalHours = zeiteintraege
       .filter((e) => inPeriod(e.date))
@@ -61,11 +76,12 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       customerCount: kunden,
-      customerLimit: 5,
+      customerLimit: limits.kunden === Infinity ? -1 : limits.kunden,
       offerCount: angebote.length,
-      offerLimit: 3,
+      offerLimit: limits.angebote === Infinity ? -1 : limits.angebote,
       projectCount: projekte,
-      projectLimit: 3,
+      projectLimit: limits.projekte === Infinity ? -1 : limits.projekte,
+      plan,
       hoursThisWeek,
       openOfferValue,
       totalRevenue,
@@ -74,8 +90,12 @@ export async function GET(req: NextRequest) {
       totalHours,
       zeitkosten,
       gewinn: totalRevenue - zeitkosten,
+      monthlyRevenue,
+      paidInvoicesCount,
+      overdueInvoicesCount,
+      paidTotal,
     });
   } catch {
     return NextResponse.json({ error: "Datenbankfehler" }, { status: 500 });
   }
-}
+});

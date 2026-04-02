@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { authFetch } from "@/lib/authFetch";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Modal from "@/components/ui/Modal";
+import SignaturePad from "@/components/ui/SignaturePad";
 import EmptyState from "@/components/ui/EmptyState";
 import { useRouter } from "next/navigation";
 import { usePro } from "@/context/ProContext";
-import { Receipt, Plus, Search, MoreVertical, Trash2, Edit, Loader, FileDown, Lock, Zap, ChevronDown, X, CornerDownLeft, ChevronRight } from "lucide-react";
+import { Receipt, Plus, Search, MoreVertical, Trash2, Edit, Loader, FileDown, Lock, Zap, ChevronDown, X, CornerDownLeft, ChevronRight, PenLine, GitBranch, Mail } from "lucide-react";
 
 type Abrechnungsart = "festpreis" | "regie";
 
@@ -28,6 +30,12 @@ interface Invoice {
   projektId?: string;
   projektName?: string;
   customerName: string;
+  signatureStatus?: "signed";
+  signedAt?: string;
+  locked?: boolean;
+  lockedAt?: string;
+  version?: number;
+  parentDocumentId?: string;
   customerAddress?: string;
   abrechnungsart: Abrechnungsart;
   betreff?: string;
@@ -43,6 +51,12 @@ interface Invoice {
   firmenname?: string;
   firmenStrasse?: string;
   firmenOrt?: string;
+  taxRate?: 0 | 7 | 19;
+  netAmount?: number;
+  taxAmount?: number;
+  grossAmount?: number;
+  paymentMethod?: "manual" | "stripe";
+  paidAt?: string;
   items: InvoiceItem[];
 }
 
@@ -79,6 +93,13 @@ export default function RechnungenPage() {
   const [saving, setSaving] = useState(false);
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
   const [tab, setTab] = useState<"positionen" | "footer">("positionen");
+  const [signModal, setSignModal] = useState<Invoice | null>(null);
+  const [signSaving, setSignSaving] = useState(false);
+  const [emailModal, setEmailModal] = useState<Invoice | null>(null);
+  const [emailTo, setEmailTo] = useState("");
+  const [emailSubject, setEmailSubject] = useState("");
+  const [emailMessage, setEmailMessage] = useState("");
+  const [emailSending, setEmailSending] = useState(false);
   const [projekte, setProjekte] = useState<Projekt[]>([]);
   const [projektId, setProjektId] = useState("");
   const [projektName, setProjektName] = useState("");
@@ -93,16 +114,17 @@ export default function RechnungenPage() {
   const [iban, setIban] = useState("");
   const [bic, setBic] = useState("");
   const [bank, setBank] = useState("");
-  const [firmenname, setFirmenname] = useState("ElektroGenius");
+  const [firmenname, setFirmenname] = useState("");
   const [firmenStrasse, setFirmenStrasse] = useState("");
   const [firmenOrt, setFirmenOrt] = useState("");
   const [items, setItems] = useState<InvoiceItem[]>([{ ...EMPTY_ITEM }]);
+  const [taxRate, setTaxRate] = useState<0 | 7 | 19>(19);
 
   useEffect(() => { fetchRechnungen(); fetchProjekte(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchProjekte = async () => {
     try {
-      const res = await fetch("/api/projekte");
+      const res = await authFetch("/api/projekte");
       const data = await res.json();
       setProjekte(Array.isArray(data) ? data : []);
     } catch { /* */ }
@@ -118,7 +140,7 @@ export default function RechnungenPage() {
   const fetchRechnungen = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/rechnungen");
+      const res = await authFetch("/api/rechnungen");
       const data = await res.json();
       setRechnungen(Array.isArray(data) ? data : []);
     } catch { setRechnungen([]); }
@@ -131,8 +153,9 @@ export default function RechnungenPage() {
     setCustomerName(""); setCustomerAddress(""); setAbrechnungsart("festpreis");
     setBetreff(""); setZahlungsziel("14 Tage netto");
     setSteuernummer(""); setIban(""); setBic(""); setBank("");
-    setFirmenname("ElektroGenius"); setFirmenStrasse(""); setFirmenOrt("");
+    setFirmenname(""); setFirmenStrasse(""); setFirmenOrt("");
     setItems(DEFAULT_EXAMPLES.map((i) => ({ ...i })));
+    setTaxRate(19);
     setTab("positionen");
     setModalOpen(true);
   };
@@ -144,7 +167,8 @@ export default function RechnungenPage() {
     setAbrechnungsart(r.abrechnungsart || "festpreis");
     setBetreff(r.betreff || ""); setZahlungsziel(r.zahlungsziel || "14 Tage netto");
     setSteuernummer(r.steuernummer || ""); setIban(r.iban || ""); setBic(r.bic || ""); setBank(r.bank || "");
-    setFirmenname(r.firmenname || "ElektroGenius"); setFirmenStrasse(r.firmenStrasse || ""); setFirmenOrt(r.firmenOrt || "");
+    setFirmenname(r.firmenname || ""); setFirmenStrasse(r.firmenStrasse || ""); setFirmenOrt(r.firmenOrt || "");
+    setTaxRate(r.taxRate ?? 19);
     setItems(r.items?.length ? r.items.map((i) => ({ ...i, mitarbeiter: i.mitarbeiter ?? 1, gesamt: i.gesamt ?? (i.menge * i.einzelpreis * (i.mitarbeiter ?? 1)) })) : [{ ...EMPTY_ITEM }]);
     setTab("positionen");
     setModalOpen(true);
@@ -181,7 +205,9 @@ export default function RechnungenPage() {
     });
   };
 
-  const totalSum = items.reduce((s, i) => s + (i.gesamt || 0), 0);
+  const netTotal  = items.reduce((s, i) => s + (i.gesamt || 0), 0);
+  const taxAmt    = Math.round(netTotal * taxRate) / 100;
+  const grossAmt  = netTotal + taxAmt;
 
   const saveRechnung = async () => {
     if (!customerName.trim()) return;
@@ -192,7 +218,9 @@ export default function RechnungenPage() {
         customerName: customerName.trim(), customerAddress: customerAddress.trim(),
         abrechnungsart, betreff, zahlungsziel, steuernummer, iban, bic, bank,
         firmenname, firmenStrasse, firmenOrt,
-        items, total: totalSum,
+        items,
+        taxRate, netAmount: netTotal, taxAmount: taxAmt, grossAmount: grossAmt,
+        total: grossAmt,
         status: editRechnung?.status || "offen",
       };
       const url = editRechnung?._id
@@ -217,17 +245,103 @@ export default function RechnungenPage() {
 
   const deleteRechnung = async (id: string) => {
     if (!confirm("Rechnung wirklich löschen?")) return;
-    await fetch(`/api/rechnungen/${id}`, { method: "DELETE" });
+    await authFetch(`/api/rechnungen/${id}`, { method: "DELETE" });
     fetchRechnungen();
+  };
+
+  const handleNewVersion = async (r: Invoice) => {
+    if (!confirm(`Neue Version von Rechnung #${r.number} erstellen? Das Original bleibt gesperrt.`)) return;
+    try {
+      const res = await authFetch("/api/documents/version", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ documentId: r._id, type: "rechnung" }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        await fetchRechnungen();
+        alert(`Neue Version #${data.number} (v${data.version}) wurde erstellt.`);
+      } else {
+        alert(data.error || "Fehler beim Erstellen der neuen Version.");
+      }
+    } catch { /* */ }
+    setMenuOpen(null);
+  };
+
+  const openEmailModal = (r: Invoice) => {
+    setEmailTo(r.customerAddress?.includes("@") ? r.customerAddress : "");
+    setEmailSubject(`Rechnung Nr. ${r.number}`);
+    setEmailMessage(`Sehr geehrte Damen und Herren,\n\nanbei erhalten Sie Rechnung Nr. ${r.number}.\n\nBitte überweisen Sie den Betrag innerhalb von ${r.zahlungsziel || "14 Tagen"}.\n\nMit freundlichen Grüßen${r.firmenname ? `\n${r.firmenname}` : ""}`);
+    setEmailModal(r);
+    setMenuOpen(null);
+  };
+
+  const handleEmailSend = async () => {
+    if (!emailModal?._id || !emailTo) return;
+    setEmailSending(true);
+    try {
+      const res = await authFetch("/api/email/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ documentId: emailModal._id, type: "rechnung", to: emailTo, subject: emailSubject, message: emailMessage }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        await fetchRechnungen();
+        setEmailModal(null);
+      } else {
+        alert(data.error || "E-Mail konnte nicht gesendet werden.");
+      }
+    } catch {
+      alert("Verbindungsfehler. Bitte erneut versuchen.");
+    } finally {
+      setEmailSending(false);
+    }
+  };
+
+  const handleSign = async (base64: string) => {
+    if (!signModal?._id) return;
+    setSignSaving(true);
+    try {
+      await authFetch("/api/signature", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ documentId: signModal._id, type: "rechnung", signatureImage: base64 }),
+      });
+      await fetchRechnungen();
+      setSignModal(null);
+    } catch {
+      //
+    } finally {
+      setSignSaving(false);
+    }
   };
 
   const updateStatus = async (id: string, status: Invoice["status"]) => {
-    await fetch(`/api/rechnungen/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) });
+    const extra = status === "bezahlt" ? { paidAt: new Date().toISOString(), paymentMethod: "manual" } : {};
+    await authFetch(`/api/rechnungen/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status, ...extra }) });
     fetchRechnungen();
   };
 
+  const handleStripeCheckout = async (r: Invoice) => {
+    try {
+      const res = await authFetch("/api/stripe/invoice-checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ invoiceId: r._id }),
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.open(data.url, "_blank");
+      } else {
+        alert(data.error || "Checkout-Fehler");
+      }
+    } catch { alert("Verbindungsfehler."); }
+    setMenuOpen(null);
+  };
+
   const downloadPdf = async (id: string, number: string) => {
-    const res = await fetch(`/api/rechnungen/${id}/pdf`);
+    const res = await authFetch(`/api/rechnungen/${id}/pdf`);
     if (!res.ok) return alert("PDF-Fehler");
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
@@ -236,7 +350,7 @@ export default function RechnungenPage() {
   };
 
   const downloadRapport = async (id: string, number: string) => {
-    const res = await fetch(`/api/rechnungen/${id}/rapport`);
+    const res = await authFetch(`/api/rechnungen/${id}/rapport`);
     if (!res.ok) return alert("Rapport-Fehler");
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
@@ -272,7 +386,7 @@ export default function RechnungenPage() {
           <p className="text-sm" style={{ color: "#8b9ab5" }}>Erstelle professionelle Rechnungen mit PDF-Export. Nur im Pro-Plan.</p>
         </div>
         <button onClick={() => router.push("/upgrade")} className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all hover:opacity-90" style={{ background: "linear-gradient(135deg,#f5a623,#c4841c)", color: "#0d1b2e" }}>
-          <Zap size={16} /> Auf Pro upgraden — 9,99€/Monat
+          <Zap size={16} /> Jetzt upgraden — ab 19,99€/Monat
         </button>
       </div>
     </DashboardLayout>
@@ -307,11 +421,20 @@ export default function RechnungenPage() {
                   <p className="text-sm font-semibold truncate" style={{ color: "#e6edf3" }}>{r.customerName}</p>
                   <p className="text-xs" style={{ color: "#8b9ab5" }}>
                     {r.number} · {r.createdAt ? new Date(r.createdAt).toLocaleDateString("de-DE") : ""} · {r.abrechnungsart === "regie" ? "Nach Aufwand" : "Festpreis"}
+                    {r.paidAt && <span style={{ color: "#22c55e" }}> · Bezahlt {new Date(r.paidAt).toLocaleDateString("de-DE")}{r.paymentMethod === "stripe" ? " (Stripe)" : ""}</span>}
                   </p>
                 </div>
                 <div className="text-right shrink-0">
-                  <p className="text-sm font-bold" style={{ color: "#00c6ff" }}>{(r.total || 0).toLocaleString("de-DE", { minimumFractionDigits: 2 })} €</p>
-                  <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: `${cfg.color}18`, color: cfg.color, border: `1px solid ${cfg.color}33` }}>{cfg.label}</span>
+                  <p className="text-sm font-bold" style={{ color: "#00c6ff" }}>{(r.grossAmount ?? r.total ?? 0).toLocaleString("de-DE", { minimumFractionDigits: 2 })} €</p>
+                  {r.taxRate !== undefined && <p className="text-xs" style={{ color: "#4a5568" }}>{r.taxRate === 0 ? "§19 UStG" : `zzgl. ${r.taxRate}% MwSt.`}</p>}
+                  <div className="flex items-center justify-end gap-1.5 mt-0.5">
+                    <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: `${cfg.color}18`, color: cfg.color, border: `1px solid ${cfg.color}33` }}>{cfg.label}</span>
+                    {r.locked && (
+                      <span className="text-xs px-1.5 py-0.5 rounded-full flex items-center gap-1" style={{ background: "#22c55e18", color: "#22c55e", border: "1px solid #22c55e44" }}>
+                        <Lock size={9} />
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div className="relative shrink-0">
                   <button onClick={(e) => { e.stopPropagation(); setMenuOpen(menuOpen === String(r._id) ? null : String(r._id)); }} className="p-1.5 rounded-lg" style={{ color: "#8b9ab5" }}>
@@ -319,10 +442,38 @@ export default function RechnungenPage() {
                   </button>
                   {menuOpen === String(r._id) && (
                     <div className="absolute right-0 top-8 z-50 rounded-xl py-1 min-w-48 shadow-xl" style={{ background: "#0d1b2e", border: "1px solid #1e3a5f" }}>
-                      <button onClick={() => { openEdit(r); setMenuOpen(null); }} className="flex items-center gap-2 w-full px-4 py-2 text-sm hover:bg-white/5" style={{ color: "#e6edf3" }}><Edit size={13} /> Bearbeiten</button>
+                      <button
+                        onClick={() => { if (!r.locked) { openEdit(r); setMenuOpen(null); } }}
+                        disabled={!!r.locked}
+                        className="flex items-center gap-2 w-full px-4 py-2 text-sm hover:bg-white/5 disabled:opacity-40 disabled:cursor-not-allowed"
+                        style={{ color: r.locked ? "#8b9ab5" : "#e6edf3" }}>
+                        {r.locked ? <Lock size={13} /> : <Edit size={13} />}
+                        {r.locked ? "Gesperrt (unterschrieben)" : "Bearbeiten"}
+                      </button>
+                      {r.locked && (
+                        <button onClick={() => handleNewVersion(r)} className="flex items-center gap-2 w-full px-4 py-2 text-sm hover:bg-white/5" style={{ color: "#f5a623" }}>
+                          <GitBranch size={13} /> Neue Version erstellen
+                        </button>
+                      )}
                       <button onClick={() => { downloadPdf(String(r._id), r.number); setMenuOpen(null); }} className="flex items-center gap-2 w-full px-4 py-2 text-sm hover:bg-white/5" style={{ color: "#00c6ff" }}><FileDown size={13} /> Rechnung PDF</button>
                       <button onClick={() => { downloadRapport(String(r._id), r.number); setMenuOpen(null); }} className="flex items-center gap-2 w-full px-4 py-2 text-sm hover:bg-white/5" style={{ color: "#22c55e" }}><FileDown size={13} /> Leistungsnachweis PDF</button>
-                      {r.status === "offen" && <button onClick={() => { updateStatus(String(r._id), "bezahlt"); setMenuOpen(null); }} className="flex items-center gap-2 w-full px-4 py-2 text-sm hover:bg-white/5" style={{ color: "#22c55e" }}>Als bezahlt markieren</button>}
+                      <button onClick={() => openEmailModal(r)} className="flex items-center gap-2 w-full px-4 py-2 text-sm hover:bg-white/5" style={{ color: "#00c6ff" }}>
+                        <Mail size={13} />
+                        {(r as { emailStatus?: string }).emailStatus === "sent" ? "Erneut senden" : "Per E-Mail senden"}
+                      </button>
+                      {(r.status === "offen" || r.status === "überfällig") && (
+                        <>
+                          <button onClick={() => handleStripeCheckout(r)} className="flex items-center gap-2 w-full px-4 py-2 text-sm hover:bg-white/5" style={{ color: "#f5a623" }}>
+                            <Receipt size={13} /> Jetzt bezahlen (Stripe)
+                          </button>
+                          <button onClick={() => { updateStatus(String(r._id), "bezahlt"); setMenuOpen(null); }} className="flex items-center gap-2 w-full px-4 py-2 text-sm hover:bg-white/5" style={{ color: "#22c55e" }}>
+                            Als bezahlt markieren
+                          </button>
+                        </>
+                      )}
+                      <button onClick={() => { setSignModal(r); setMenuOpen(null); }} className="flex items-center gap-2 w-full px-4 py-2 text-sm hover:bg-white/5" style={{ color: r.signatureStatus === "signed" ? "#22c55e" : "#00c6ff" }}>
+                        <PenLine size={13} /> {r.signatureStatus === "signed" ? "Unterschrift anzeigen" : "Unterschreiben"}
+                      </button>
                       <button onClick={() => { deleteRechnung(String(r._id)); setMenuOpen(null); }} className="flex items-center gap-2 w-full px-4 py-2 text-sm hover:bg-white/5" style={{ color: "#ef4444" }}><Trash2 size={13} /> Löschen</button>
                     </div>
                   )}
@@ -392,6 +543,17 @@ export default function RechnungenPage() {
                 <label className="block text-xs font-medium mb-1" style={{ color: "#8b9ab5" }}>Betreff</label>
                 <input value={betreff} onChange={(e) => setBetreff(e.target.value)} placeholder="z.B. Elektroinstallation EFH" className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputSty} />
               </div>
+              <div>
+                <label className="block text-xs font-medium mb-1" style={{ color: "#8b9ab5" }}>Umsatzsteuer</label>
+                <div className="relative">
+                  <select value={taxRate} onChange={(e) => setTaxRate(Number(e.target.value) as 0 | 7 | 19)} className="w-full px-3 py-2 rounded-lg text-sm outline-none appearance-none pr-8" style={inputSty}>
+                    <option value={19}>19% (Standard)</option>
+                    <option value={7}>7% (ermäßigt)</option>
+                    <option value={0}>0% (Kleinunternehmer §19 UStG)</option>
+                  </select>
+                  <ChevronDown size={13} style={{ color: "#8b9ab5", position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
+                </div>
+              </div>
             </div>
 
             {/* Positionen */}
@@ -460,9 +622,13 @@ export default function RechnungenPage() {
                   </div>
                 ))}
               </div>
-              <div className="flex justify-end mt-3 gap-4">
-                <span className="text-xs" style={{ color: "#8b9ab5" }}>Netto: {(totalSum / 1.19).toFixed(2)} € · MwSt. 19%: {(totalSum - totalSum / 1.19).toFixed(2)} €</span>
-                <span className="text-sm font-bold" style={{ color: "#00c6ff" }}>Brutto: {totalSum.toLocaleString("de-DE", { minimumFractionDigits: 2 })} €</span>
+              <div className="flex justify-end mt-3 gap-4 flex-wrap items-center">
+                <span className="text-xs" style={{ color: "#8b9ab5" }}>
+                  Netto: {netTotal.toFixed(2)} €
+                  {taxRate > 0 && <> · MwSt. {taxRate}%: {taxAmt.toFixed(2)} €</>}
+                  {taxRate === 0 && <span style={{ color: "#f5a623" }}> · §19 UStG</span>}
+                </span>
+                <span className="text-sm font-bold" style={{ color: "#00c6ff" }}>Brutto: {grossAmt.toLocaleString("de-DE", { minimumFractionDigits: 2 })} €</span>
               </div>
             </div>
 
@@ -477,7 +643,7 @@ export default function RechnungenPage() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-medium mb-1" style={{ color: "#8b9ab5" }}>Firmenname (auf PDF)</label>
-                <input value={firmenname} onChange={(e) => setFirmenname(e.target.value)} placeholder="ElektroGenius GmbH" className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputSty} />
+                <input value={firmenname} onChange={(e) => setFirmenname(e.target.value)} placeholder="Muster Elektro GmbH" className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputSty} />
               </div>
               <div>
                 <label className="block text-xs font-medium mb-1" style={{ color: "#8b9ab5" }}>Steuernummer</label>
@@ -527,6 +693,107 @@ export default function RechnungenPage() {
             {saving ? "Speichern…" : editRechnung ? "Aktualisieren" : "Rechnung erstellen"}
           </button>
         </div>
+      </Modal>
+
+      {/* E-Mail Modal */}
+      <Modal
+        open={!!emailModal}
+        onClose={() => setEmailModal(null)}
+        title={`Rechnung #${emailModal?.number} per E-Mail senden`}
+        maxWidth="560px"
+      >
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Empfänger *</label>
+            <input
+              type="email"
+              value={emailTo}
+              onChange={(e) => setEmailTo(e.target.value)}
+              placeholder="kunde@beispiel.de"
+              className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
+              style={{ background: "#0d1b2e", border: "1px solid #1e3a5f", color: "#e6edf3" }}
+              onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Betreff</label>
+            <input
+              value={emailSubject}
+              onChange={(e) => setEmailSubject(e.target.value)}
+              className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
+              style={{ background: "#0d1b2e", border: "1px solid #1e3a5f", color: "#e6edf3" }}
+              onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Nachricht</label>
+            <textarea
+              value={emailMessage}
+              onChange={(e) => setEmailMessage(e.target.value)}
+              rows={6}
+              className="w-full px-3 py-2.5 rounded-xl text-sm outline-none resize-none"
+              style={{ background: "#0d1b2e", border: "1px solid #1e3a5f", color: "#e6edf3" }}
+              onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
+            />
+          </div>
+          <p className="text-xs" style={{ color: "#8b9ab5" }}>
+            PDF wird automatisch als Anhang beigefügt.
+          </p>
+          <div className="flex gap-3 pt-1">
+            <button
+              onClick={() => setEmailModal(null)}
+              className="flex-1 py-2.5 rounded-xl text-sm font-semibold"
+              style={{ background: "#0d1b2e", border: "1px solid #1e3a5f", color: "#8b9ab5" }}
+            >
+              Abbrechen
+            </button>
+            <button
+              onClick={handleEmailSend}
+              disabled={emailSending || !emailTo.includes("@")}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50"
+              style={{ background: "linear-gradient(135deg, #00c6ff, #0099cc)", color: "#0d1b2e" }}
+            >
+              {emailSending ? <Loader size={14} className="animate-spin" /> : <Mail size={14} />}
+              {emailSending ? "Wird gesendet…" : "Senden"}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Signatur-Modal */}
+      <Modal
+        open={!!signModal}
+        onClose={() => setSignModal(null)}
+        title={signModal?.signatureStatus === "signed" ? "Unterschrift" : `Rechnung #${signModal?.number} unterschreiben`}
+        maxWidth="760px"
+      >
+        {signModal?.signatureStatus === "signed" ? (
+          <div>
+            <div className="rounded-xl overflow-hidden mb-4" style={{ border: "1px solid #1e3a5f" }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={(signModal as { signatureImage?: string }).signatureImage || ""} alt="Unterschrift" className="w-full" style={{ background: "#0d1b2e" }} />
+            </div>
+            <p className="text-xs text-center" style={{ color: "#8b9ab5" }}>
+              Unterschrieben am {signModal.signedAt ? new Date(signModal.signedAt).toLocaleString("de-DE") : "–"}
+            </p>
+            <button
+              onClick={() => setSignModal(null)}
+              className="w-full mt-4 py-2.5 rounded-xl text-sm font-semibold"
+              style={{ background: "#0d1b2e", border: "1px solid #1e3a5f", color: "#8b9ab5" }}
+            >
+              Schließen
+            </button>
+          </div>
+        ) : (
+          <SignaturePad
+            onSave={handleSign}
+            onCancel={() => setSignModal(null)}
+            saving={signSaving}
+          />
+        )}
       </Modal>
     </DashboardLayout>
   );

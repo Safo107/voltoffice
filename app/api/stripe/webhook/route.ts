@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { getDb } from "@/lib/mongodb";
+import { ObjectId } from "mongodb";
 import type Stripe from "stripe";
 import type { Db } from "mongodb";
 
@@ -77,21 +78,61 @@ export async function POST(req: NextRequest) {
   switch (event.type) {
     case "checkout.session.completed": {
       const session = event.data.object as Stripe.Checkout.Session;
+      const meta = session.metadata as Record<string, string> | null;
 
+      // ── Invoice-Zahlung via Stripe ────────────────────────────────────────
+      if (meta?.type === "invoice_payment" && meta?.invoiceId) {
+        const invoiceId = meta.invoiceId;
+        const now = new Date().toISOString();
+        try {
+          const invoiceDoc = await db.collection("rechnungen").findOne({ _id: new ObjectId(invoiceId) });
+          if (invoiceDoc && invoiceDoc.status !== "bezahlt") {
+            await db.collection("rechnungen").updateOne(
+              { _id: new ObjectId(invoiceId) },
+              { $set: { status: "bezahlt", paymentMethod: "stripe", paidAt: now, updatedAt: now } }
+            );
+            // Create income transaction (avoid duplicate)
+            const alreadyBooked = await db.collection("transactions").findOne({ relatedInvoiceId: invoiceId });
+            if (!alreadyBooked) {
+              await db.collection("transactions").insertOne({
+                userId: invoiceDoc.userId,
+                type: "income",
+                amount: invoiceDoc.grossAmount ?? invoiceDoc.total ?? 0,
+                date: now,
+                description: `Rechnung ${invoiceDoc.number || invoiceId} — ${invoiceDoc.customerName || ""}`,
+                relatedInvoiceId: invoiceId,
+                invoiceNumber: invoiceDoc.number || invoiceId,
+                customerName: invoiceDoc.customerName || "",
+                paymentMethod: "stripe",
+                createdAt: now,
+              });
+            }
+            console.log(`✅ Rechnung ${invoiceId} via Stripe bezahlt`);
+          }
+        } catch (e) {
+          console.error("[webhook] Invoice-Zahlung Fehler:", e);
+        }
+        break;
+      }
+
+      // ── VoltOffice Abo Aktivierung ────────────────────────────────────────
       const filter = await resolveUserFilter(
-        session.metadata as Record<string, string> | null,
+        meta,
         typeof session.customer === "string" ? session.customer : null,
         session.customer_details?.email || session.customer_email
       );
 
       if (filter) {
         const subId = typeof session.subscription === "string" ? session.subscription : null;
+        // Detect plan from metadata (set at checkout); fallback to "pro"
+        const plan: "pro" | "business" = (meta?.plan === "business") ? "business" : "pro";
         await db.collection("users").updateOne(
           filter,
           {
             $set: {
               pro: true,
-              subscriptionTier: "pro",
+              plan,
+              subscriptionTier: plan,
               proSince: new Date().toISOString(),
               ...(subId && { stripeSubscriptionId: subId }),
               ...(typeof session.customer === "string" && { stripeCustomerId: session.customer }),
@@ -99,7 +140,7 @@ export async function POST(req: NextRequest) {
           },
           { upsert: true }
         );
-        console.log(`✅ Pro aktiviert für filter=`, filter);
+        console.log(`✅ Plan "${plan}" aktiviert für filter=`, filter);
       }
       break;
     }
@@ -125,22 +166,26 @@ export async function POST(req: NextRequest) {
 
     case "customer.subscription.updated": {
       const subscription = event.data.object as Stripe.Subscription;
+      const subMeta = subscription.metadata as Record<string, string> | null;
 
       const filter = await resolveUserFilter(
-        subscription.metadata as Record<string, string> | null,
+        subMeta,
         typeof subscription.customer === "string" ? subscription.customer : null,
         null
       );
 
       if (filter) {
-        const isActive = subscription.status === "active";
+        const isActive = subscription.status === "active" || subscription.status === "trialing";
         const shouldDowngrade = ["canceled", "incomplete_expired", "unpaid"].includes(subscription.status);
+        // Determine plan from metadata stored at checkout
+        const plan: "pro" | "business" = (subMeta?.plan === "business") ? "business" : "pro";
         await db.collection("users").updateOne(
           filter,
           {
             $set: {
               pro: isActive,
-              subscriptionTier: isActive ? "pro" : (shouldDowngrade ? "free" : "pro"),
+              ...(isActive && { plan, subscriptionTier: plan }),
+              ...(shouldDowngrade && { plan: "free", subscriptionTier: "free" }),
               stripeSubscriptionStatus: subscription.status,
             },
           }
@@ -158,6 +203,19 @@ export async function POST(req: NextRequest) {
           { $set: { lastPaymentFailed: new Date().toISOString() } }
         );
         console.warn(`⚠️ Zahlung fehlgeschlagen für customer=${customerId}`);
+      }
+      break;
+    }
+
+    case "invoice.payment_succeeded": {
+      const invoice = event.data.object as Stripe.Invoice & { customer?: string };
+      const customerId = typeof invoice.customer === "string" ? invoice.customer : null;
+      if (customerId) {
+        await db.collection("users").updateOne(
+          { stripeCustomerId: customerId },
+          { $set: { lastPaymentFailed: null, lastPaymentSucceeded: new Date().toISOString() } }
+        );
+        console.log(`✅ Zahlung erfolgreich für customer=${customerId}`);
       }
       break;
     }

@@ -2,19 +2,34 @@ import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { getDb } from "@/lib/mongodb";
 
+type Plan = "pro" | "business";
+
+function getPriceId(plan: Plan): string {
+  if (plan === "business") {
+    return process.env.STRIPE_PRICE_ID_BUSINESS || "";
+  }
+  // "pro" — 19,99€/Monat (STRIPE_PRICE_ID_PRO muss in Vercel gesetzt sein)
+  // Note: legacy STRIPE_PRICE_ID (9,99€) is kept in .env for grandfathered subscribers only
+  return process.env.STRIPE_PRICE_ID_PRO || "";
+}
+
 export async function POST(req: NextRequest) {
   if (!stripe) {
     return NextResponse.json({ error: "Stripe nicht konfiguriert" }, { status: 503 });
   }
 
   try {
-    const { uid, email } = await req.json();
+    const { uid, email, plan = "pro" } = await req.json() as { uid: string; email: string; plan?: Plan };
 
     if (!uid || !email) {
       return NextResponse.json({ error: "uid und email erforderlich" }, { status: 400 });
     }
 
-    const priceId = process.env.STRIPE_PRICE_ID || "price_1THakKEktxCnIq0C0Gz5DLKT";
+    const priceId = getPriceId(plan);
+    if (!priceId) {
+      return NextResponse.json({ error: `Kein Stripe-Preis für Plan "${plan}" konfiguriert` }, { status: 503 });
+    }
+
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://voltoffice.elektrogenius.de";
 
     const db = await getDb();
@@ -41,10 +56,10 @@ export async function POST(req: NextRequest) {
       mode: "subscription",
       success_url: `${appUrl}/upgrade/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${appUrl}/upgrade`,
-      // userId in ALLEN Metadata-Feldern für sichere Webhook-Zuordnung
-      metadata: { userId: uid },
+      metadata: { userId: uid, plan },
       subscription_data: {
-        metadata: { userId: uid },
+        metadata: { userId: uid, plan },
+        trial_period_days: 14,
       },
       locale: "de",
     });

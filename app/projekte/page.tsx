@@ -2,17 +2,23 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { authFetch } from "@/lib/authFetch";
+import { usePro } from "@/context/ProContext";
+import { getPlanLimits } from "@/lib/planLimits";
 import DashboardLayout from "@/components/layout/DashboardLayout";
+import CustomerSelect from "@/components/ui/CustomerSelect";
 import Modal from "@/components/ui/Modal";
 import EmptyState from "@/components/ui/EmptyState";
-import { usePro } from "@/context/ProContext";
-import { Briefcase, Plus, Search, MoreVertical, Calendar, User, AlertCircle, Trash2, Edit, Home, Building2, Factory, Package, X, Check, Euro, TrendingUp, TrendingDown } from "lucide-react";
+import UpgradeModal from "@/components/ui/UpgradeModal";
+import PlanLimitBar from "@/components/ui/PlanLimitBar";
+import { Briefcase, Plus, Search, MoreVertical, Calendar, User, Trash2, Edit, Home, Building2, Factory, Package, X, Check, Euro, TrendingUp, TrendingDown } from "lucide-react";
 import SkeletonCard from "@/components/ui/SkeletonCard";
 
 interface Project {
   _id?: string;
   title: string;
   customerName: string;
+  customerId?: string;
   status: "active" | "paused" | "completed";
   startDate: string;
   description: string;
@@ -34,14 +40,18 @@ const statusConfig = {
   completed: { label: "Abgeschlossen", color: "#8b9ab5" },
 };
 
-const FREE_LIMIT = 3;
+// FREE_LIMIT removed — use plan-based limits from getPlanLimits()
 
-const EMPTY_FORM = { title: "", customerName: "", status: "active" as Project["status"], startDate: "", description: "" };
+const EMPTY_FORM = { title: "", customerName: "", customerId: undefined as string | undefined, status: "active" as Project["status"], startDate: "", description: "" };
 
 export default function ProjektePage() {
-  const { isPro } = usePro();
+  const { isPro, plan } = usePro();
+  const limits = getPlanLimits(plan);
+  const projekteLimit = limits.projekte === Infinity ? -1 : limits.projekte;
+
   const router = useRouter();
   const [projekte, setProjekte] = useState<Project[]>([]);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
@@ -74,7 +84,7 @@ export default function ProjektePage() {
   const fetchProjekte = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/projekte");
+      const res = await authFetch("/api/projekte");
       const data = await res.json();
       setProjekte(Array.isArray(data) ? data : []);
     } catch {
@@ -92,7 +102,7 @@ export default function ProjektePage() {
 
   const openEdit = (p: Project) => {
     setEditProjekt(p);
-    setForm({ title: p.title, customerName: p.customerName, status: p.status, startDate: p.startDate, description: p.description });
+    setForm({ title: p.title, customerName: p.customerName, customerId: p.customerId, status: p.status, startDate: p.startDate, description: p.description });
     setModalOpen(true);
     setMenuOpen(null);
   };
@@ -102,17 +112,22 @@ export default function ProjektePage() {
     setSaving(true);
     try {
       if (editProjekt) {
-        await fetch(`/api/projekte/${editProjekt._id}`, {
+        await authFetch(`/api/projekte/${editProjekt._id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(form),
         });
       } else {
-        await fetch("/api/projekte", {
+        const res = await authFetch("/api/projekte", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(form),
         });
+        if (res.status === 403) {
+          setModalOpen(false);
+          setUpgradeOpen(true);
+          return;
+        }
       }
       await fetchProjekte();
       setModalOpen(false);
@@ -129,7 +144,7 @@ export default function ProjektePage() {
     setMenuOpen(null);
     setMaterialLoading(true);
     try {
-      const res = await fetch(`/api/material?projektId=${p._id}`);
+      const res = await authFetch(`/api/material?projektId=${p._id}`);
       const data = await res.json();
       setMaterials(Array.isArray(data) ? data : []);
     } catch { setMaterials([]); }
@@ -141,7 +156,7 @@ export default function ProjektePage() {
     if (!materialProjekt?._id || !matForm.name.trim()) return;
     setMatSaving(true);
     try {
-      const res = await fetch("/api/material", {
+      const res = await authFetch("/api/material", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...matForm, projektId: materialProjekt._id, verbraucht: false }),
@@ -157,7 +172,7 @@ export default function ProjektePage() {
 
   const toggleVerbraucht = async (item: MaterialItem) => {
     try {
-      await fetch(`/api/material/${item._id}`, {
+      await authFetch(`/api/material/${item._id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ verbraucht: !item.verbraucht }),
@@ -168,7 +183,7 @@ export default function ProjektePage() {
 
   const deleteMaterial = async (item: MaterialItem) => {
     try {
-      await fetch(`/api/material/${item._id}`, { method: "DELETE" });
+      await authFetch(`/api/material/${item._id}`, { method: "DELETE" });
       setMaterials((prev) => prev.filter((m) => m._id !== item._id));
     } catch { /* */ }
   };
@@ -181,9 +196,9 @@ export default function ProjektePage() {
     setGewinnLoading(true);
     try {
       const [rechRes, zeitRes, matRes] = await Promise.all([
-        fetch("/api/rechnungen"),
-        fetch("/api/zeiterfassung"),
-        fetch(`/api/material?projektId=${p._id}`),
+        authFetch("/api/rechnungen"),
+        authFetch("/api/zeiterfassung"),
+        authFetch(`/api/material?projektId=${p._id}`),
       ]);
       const [rechnungen, zeiten, materialItems] = await Promise.all([
         rechRes.json(), zeitRes.json(), matRes.json(),
@@ -209,7 +224,7 @@ export default function ProjektePage() {
   const handleDelete = async (p: Project) => {
     if (!confirm(`Projekt "${p.title}" wirklich löschen?`)) return;
     try {
-      await fetch(`/api/projekte/${p._id}`, { method: "DELETE" });
+      await authFetch(`/api/projekte/${p._id}`, { method: "DELETE" });
       await fetchProjekte();
     } catch {
       //
@@ -220,13 +235,14 @@ export default function ProjektePage() {
   const filtered = projekte.filter(
     (p) => p.title.toLowerCase().includes(search.toLowerCase()) || p.customerName.toLowerCase().includes(search.toLowerCase())
   );
-  const atLimit = !isPro && projekte.length >= FREE_LIMIT;
+  const atLimit = projekteLimit !== -1 && projekte.length >= projekteLimit;
+  const subtitle = projekteLimit === -1
+    ? `${projekte.length} Projekte`
+    : `${projekte.length} von ${projekteLimit} Projekten`;
 
   return (
-    <DashboardLayout
-      title="Projekte"
-      subtitle={isPro ? `${projekte.length} Projekte` : `${projekte.length} von ${FREE_LIMIT} Projekten (Free)`}
-    >
+    <DashboardLayout title="Projekte" subtitle={subtitle}>
+      <UpgradeModal open={upgradeOpen} onClose={() => setUpgradeOpen(false)} resource="projekte" limit={projekteLimit === -1 ? undefined : projekteLimit} />
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm flex-1 max-w-xs"
           style={{ background: "#112240", border: "1px solid #1e3a5f", color: "#8b9ab5" }}>
@@ -235,31 +251,19 @@ export default function ProjektePage() {
             onChange={(e) => setSearch(e.target.value)}
             className="flex-1 bg-transparent outline-none text-sm" style={{ color: "#e6edf3" }} />
         </div>
-        <button onClick={openNew} disabled={atLimit}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ml-3 disabled:cursor-not-allowed"
-          style={{ background: atLimit ? "#1e3a5f" : "linear-gradient(135deg, #00c6ff, #0099cc)", color: atLimit ? "#4a5568" : "#0d1b2e" }}>
-          <Plus size={16} /> Neues Projekt
+        <button onClick={atLimit ? () => setUpgradeOpen(true) : openNew}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ml-3"
+          style={{
+            background: atLimit ? "#f5a62322" : "linear-gradient(135deg, #00c6ff, #0099cc)",
+            color: atLimit ? "#f5a623" : "#0d1b2e",
+            border: atLimit ? "1px solid #f5a62344" : "none",
+          }}>
+          <Plus size={16} /> {atLimit ? "Limit erreicht" : "Neues Projekt"}
         </button>
       </div>
 
-      {atLimit && (
-        <div className="flex items-center justify-between gap-3 p-4 rounded-xl mb-4"
-          style={{ background: "#f5a62310", border: "1px solid #f5a62333" }}>
-          <div className="flex items-start gap-3">
-            <AlertCircle size={16} style={{ color: "#f5a623", marginTop: 1 }} />
-            <p className="text-sm" style={{ color: "#e6edf3" }}>
-              <span style={{ color: "#f5a623", fontWeight: 600 }}>Free-Limit erreicht.</span>{" "}
-              Max. {FREE_LIMIT} Projekte im Free-Plan.
-            </p>
-          </div>
-          <button
-            onClick={() => router.push("/upgrade")}
-            className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all hover:opacity-90"
-            style={{ background: "linear-gradient(135deg, #f5a623, #c4841c)", color: "#0d1b2e" }}
-          >
-            Upgraden
-          </button>
-        </div>
+      {projekteLimit !== -1 && (
+        <div className="mb-4"><PlanLimitBar label="Projekte" count={projekte.length} limit={projekteLimit} /></div>
       )}
 
       {loading ? (
@@ -414,12 +418,11 @@ export default function ProjektePage() {
           </div>
           <div>
             <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Kunde</label>
-            <input value={form.customerName} onChange={(e) => setForm({ ...form, customerName: e.target.value })}
-              placeholder="z.B. Schulz GmbH"
-              className="w-full px-4 py-2.5 rounded-xl text-sm outline-none"
-              style={{ background: "#0d1b2e", border: "1px solid #1e3a5f", color: "#e6edf3" }}
-              onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
-              onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }} />
+            <CustomerSelect
+              value={form.customerName}
+              onChange={(name, id) => setForm({ ...form, customerName: name, customerId: id })}
+              placeholder="Kunde suchen oder eingeben…"
+            />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
