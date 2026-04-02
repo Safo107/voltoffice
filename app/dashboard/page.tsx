@@ -9,6 +9,7 @@ import { usePro } from "@/context/ProContext";
 import {
   Users, FileText, Briefcase, Clock, AlertCircle, ArrowRight,
   Search, X, Zap, Calculator, AlertTriangle, CheckCircle,
+  TrendingUp, Receipt, Euro,
 } from "lucide-react";
 import WorkdayProgressWidget from "@/components/widgets/WorkdayProgressWidget";
 import WeatherWidget from "@/components/widgets/WeatherWidget";
@@ -23,6 +24,9 @@ interface DashboardStats {
   offerCount: number; offerLimit: number;
   projectCount: number; projectLimit: number;
   hoursThisWeek: number; openOfferValue: number;
+  totalRevenue: number; openInvoicesTotal: number;
+  openInvoicesCount: number; totalHours: number;
+  zeitkosten: number; gewinn: number;
 }
 interface OpenOffer {
   _id?: string; number: string; customerName: string; total: number; status: string;
@@ -257,12 +261,14 @@ export default function DashboardPage() {
   const [openOffers, setOpenOffers] = useState<OpenOffer[]>([]);
   const [recentProjekte, setRecentProjekte] = useState<Projekt[]>([]);
   const [loadingStats, setLoadingStats] = useState(true);
+  const [period, setPeriod] = useState<"week" | "month" | "all">("month");
 
   useEffect(() => {
+    setLoadingStats(true);
     const load = async () => {
       try {
         const [statsRes, offersRes, projekteRes] = await Promise.all([
-          fetch("/api/dashboard"),
+          fetch(`/api/dashboard?period=${period}`),
           fetch("/api/angebote"),
           fetch("/api/projekte"),
         ]);
@@ -279,7 +285,7 @@ export default function DashboardPage() {
       finally { setLoadingStats(false); }
     };
     load();
-  }, []);
+  }, [period]);
 
   // Cmd/Ctrl+K → Search
   const handleKeydown = useCallback((e: KeyboardEvent) => {
@@ -360,6 +366,60 @@ export default function DashboardPage() {
           ⌘K
         </kbd>
       </button>
+
+      {/* ── Betriebskennzahlen ── */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-bold" style={{ color: "#e6edf3", fontFamily: "var(--font-syne)" }}>
+            Betriebskennzahlen
+          </h2>
+          <div className="flex items-center gap-1 p-1 rounded-lg" style={{ background: "#112240", border: "1px solid #1e3a5f" }}>
+            {(["week", "month", "all"] as const).map((p) => (
+              <button key={p} onClick={() => setPeriod(p)}
+                className="px-3 py-1 rounded-md text-xs font-medium transition-all"
+                style={{
+                  background: period === p ? "#00c6ff" : "transparent",
+                  color: period === p ? "#0d1b2e" : "#8b9ab5",
+                }}>
+                {p === "week" ? "Woche" : p === "month" ? "Monat" : "Gesamt"}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+          {[
+            {
+              label: "Umsatz", icon: <TrendingUp size={18} />, color: "#00c6ff",
+              value: loadingStats ? "…" : `${(s?.totalRevenue ?? 0).toLocaleString("de-DE", { minimumFractionDigits: 0 })} €`,
+              sub: "Alle Rechnungen",
+            },
+            {
+              label: "Offene Rechnungen", icon: <Receipt size={18} />, color: "#f5a623",
+              value: loadingStats ? "…" : `${(s?.openInvoicesTotal ?? 0).toLocaleString("de-DE", { minimumFractionDigits: 0 })} €`,
+              sub: `${s?.openInvoicesCount ?? 0} ausstehend`,
+            },
+            {
+              label: "Stunden", icon: <Clock size={18} />, color: "#22c55e",
+              value: loadingStats ? "…" : `${(s?.totalHours ?? 0).toFixed(1)}h`,
+              sub: "Erfasste Arbeitszeit",
+            },
+            {
+              label: "Ergebnis", icon: <Euro size={18} />, color: (s?.gewinn ?? 0) >= 0 ? "#22c55e" : "#ef4444",
+              value: loadingStats ? "…" : `${(s?.gewinn ?? 0) >= 0 ? "+" : ""}${(s?.gewinn ?? 0).toLocaleString("de-DE", { minimumFractionDigits: 0 })} €`,
+              sub: "Umsatz – Mitarbeiterkosten",
+            },
+          ].map((k) => (
+            <div key={k.label} className="rounded-xl p-4" style={{ background: "#112240", border: "1px solid #1e3a5f" }}>
+              <div className="flex items-center justify-between mb-2">
+                <span style={{ color: k.color }}>{k.icon}</span>
+                <span className="text-xs" style={{ color: "#4a6fa5" }}>{k.sub}</span>
+              </div>
+              <p className="text-2xl font-bold" style={{ color: k.color, fontFamily: "var(--font-syne)" }}>{k.value}</p>
+              <p className="text-xs mt-0.5" style={{ color: "#8b9ab5" }}>{k.label}</p>
+            </div>
+          ))}
+        </div>
+      </div>
 
       {/* ── Stats ── */}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 mb-6">

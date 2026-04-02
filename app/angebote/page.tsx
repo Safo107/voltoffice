@@ -7,7 +7,7 @@ import EmptyState from "@/components/ui/EmptyState";
 import { useRouter } from "next/navigation";
 import { usePro } from "@/context/ProContext";
 import {
-  FileText, Plus, Search, MoreVertical, AlertCircle, Trash2, Edit, Loader, Send, FolderPlus,
+  FileText, Plus, Search, MoreVertical, AlertCircle, Trash2, Edit, Loader, Send, FolderPlus, FileDown,
 } from "lucide-react";
 
 interface OfferItem {
@@ -55,6 +55,15 @@ export default function AngebotePage() {
   const [items, setItems] = useState<OfferItem[]>([{ ...EMPTY_ITEM }]);
 
   useEffect(() => { fetchAngebote(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const downloadPdf = async (id: string, num: string) => {
+    const res = await fetch(`/api/angebote/${id}/pdf`);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `Angebot-${num}.pdf`;
+    a.click(); URL.revokeObjectURL(url);
+  };
 
   const handleConvertToProjekt = async (angebot: Offer) => {
     if (!confirm(`Angebot ${angebot.number} in neues Projekt umwandeln?`)) return;
@@ -292,6 +301,13 @@ export default function AngebotePage() {
                   onMouseEnter={(e) => { e.currentTarget.style.background = "#1e3a5f"; }}
                   onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
                   <Edit size={13} /> Bearbeiten
+                </button>
+                <button onClick={() => { downloadPdf(id, angebot.number); setMenuOpen(null); }}
+                  className="flex items-center gap-2 w-full px-4 py-2 text-sm transition-all"
+                  style={{ color: "#00c6ff" }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = "#00c6ff18"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
+                  <FileDown size={13} /> Als PDF herunterladen
                 </button>
                 <button onClick={() => { handleConvertToProjekt(angebot); setMenuOpen(null); }}
                   className="flex items-center gap-2 w-full px-4 py-2 text-sm transition-all"
