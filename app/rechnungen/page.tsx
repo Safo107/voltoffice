@@ -17,6 +17,7 @@ interface InvoiceItem {
   einzelpreis: number;
   gesamt: number;
   typ: "material" | "lohn" | "sonstiges";
+  mitarbeiter?: number;
 }
 
 interface Invoice {
@@ -52,10 +53,10 @@ const EINHEITEN_MATERIAL = ["Stk.", "m", "m²", "Pkg.", "Set", "l", "kg"];
 const EINHEITEN_LOHN = ["Std.", "AW"];
 const EINHEITEN_SONST = ["Pausch.", "km", "Std."];
 
-const EMPTY_ITEM: InvoiceItem = { beschreibung: "", menge: 1, einheit: "Stk.", einzelpreis: 0, gesamt: 0, typ: "material" };
+const EMPTY_ITEM: InvoiceItem = { beschreibung: "", menge: 1, einheit: "Stk.", einzelpreis: 0, gesamt: 0, typ: "material", mitarbeiter: 1 };
 
 const DEFAULT_EXAMPLES: InvoiceItem[] = [
-  { beschreibung: "Montagearbeiten Elektroinstallation", menge: 8, einheit: "Std.", einzelpreis: 65, gesamt: 520, typ: "lohn" },
+  { beschreibung: "Montagearbeiten Elektroinstallation", menge: 8, einheit: "Std.", einzelpreis: 65, gesamt: 520, typ: "lohn", mitarbeiter: 1 },
   { beschreibung: "NYM-J 3x1,5mm² Kabel", menge: 120, einheit: "m", einzelpreis: 1.80, gesamt: 216, typ: "material" },
   { beschreibung: "Schuko-Steckdosen", menge: 15, einheit: "Stk.", einzelpreis: 8, gesamt: 120, typ: "material" },
   { beschreibung: "Anfahrtspauschale", menge: 1, einheit: "Pausch.", einzelpreis: 35, gesamt: 35, typ: "sonstiges" },
@@ -127,7 +128,7 @@ export default function RechnungenPage() {
     setBetreff(r.betreff || ""); setZahlungsziel(r.zahlungsziel || "14 Tage netto");
     setSteuernummer(r.steuernummer || ""); setIban(r.iban || ""); setBic(r.bic || ""); setBank(r.bank || "");
     setFirmenname(r.firmenname || "ElektroGenius"); setFirmenStrasse(r.firmenStrasse || ""); setFirmenOrt(r.firmenOrt || "");
-    setItems(r.items?.length ? r.items.map((i) => ({ ...i, gesamt: i.gesamt ?? (i.menge * i.einzelpreis) })) : [{ ...EMPTY_ITEM }]);
+    setItems(r.items?.length ? r.items.map((i) => ({ ...i, mitarbeiter: i.mitarbeiter ?? 1, gesamt: i.gesamt ?? (i.menge * i.einzelpreis * (i.mitarbeiter ?? 1)) })) : [{ ...EMPTY_ITEM }]);
     setTab("positionen");
     setModalOpen(true);
   };
@@ -136,15 +137,29 @@ export default function RechnungenPage() {
     setItems((prev) => {
       const upd = [...prev];
       upd[idx] = { ...upd[idx], [field]: value };
-      if (field === "menge" || field === "einzelpreis") {
-        upd[idx].gesamt = upd[idx].menge * upd[idx].einzelpreis;
+      if (field === "menge" || field === "einzelpreis" || field === "mitarbeiter") {
+        const ma = upd[idx].typ === "lohn" ? (upd[idx].mitarbeiter ?? 1) : 1;
+        upd[idx].gesamt = upd[idx].menge * upd[idx].einzelpreis * ma;
       }
       // Auto-Einheit je nach Typ
       if (field === "typ") {
         if (value === "lohn" && !EINHEITEN_LOHN.includes(upd[idx].einheit)) upd[idx].einheit = "Std.";
         if (value === "material" && !EINHEITEN_MATERIAL.includes(upd[idx].einheit)) upd[idx].einheit = "Stk.";
         if (value === "sonstiges" && !EINHEITEN_SONST.includes(upd[idx].einheit)) upd[idx].einheit = "Pausch.";
+        // Gesamt neu berechnen wenn Typ wechselt
+        const ma = value === "lohn" ? (upd[idx].mitarbeiter ?? 1) : 1;
+        upd[idx].gesamt = upd[idx].menge * upd[idx].einzelpreis * ma;
       }
+      return upd;
+    });
+  };
+
+  const autoDescLohn = (idx: number) => {
+    setItems((prev) => {
+      const upd = [...prev];
+      const item = upd[idx];
+      const ma = item.mitarbeiter ?? 1;
+      upd[idx] = { ...item, beschreibung: `${ma} Mitarbeiter à ${item.menge} ${item.einheit}` };
       return upd;
     });
   };
@@ -348,6 +363,7 @@ export default function RechnungenPage() {
               <div className="space-y-2">
                 {items.map((item, idx) => (
                   <div key={idx} className="rounded-xl p-2.5 space-y-1.5" style={{ background: "#0d1b2e", border: "1px solid #1e3a5f" }}>
+                    {/* Zeile 1: Beschreibung + Typ */}
                     <div className="flex gap-2">
                       <input value={item.beschreibung} onChange={(e) => updateItem(idx, "beschreibung", e.target.value)} placeholder="Beschreibung" className="flex-1 px-2 py-1.5 rounded-lg text-xs outline-none" style={inputSty} />
                       <select value={item.typ} onChange={(e) => updateItem(idx, "typ", e.target.value)} className="px-2 py-1.5 rounded-lg text-xs outline-none" style={inputSty}>
@@ -356,12 +372,46 @@ export default function RechnungenPage() {
                         <option value="sonstiges">Sonstiges</option>
                       </select>
                     </div>
+                    {/* Zeile 2 (Lohn): Mitarbeiter-Stepper + Auto-Beschreibung */}
+                    {item.typ === "lohn" && (
+                      <div className="flex gap-2 items-center">
+                        <span className="text-xs" style={{ color: "#8b9ab5", whiteSpace: "nowrap" }}>Mitarbeiter:</span>
+                        <div className="flex items-center rounded-lg overflow-hidden" style={{ border: "1px solid #1e3a5f" }}>
+                          <button
+                            type="button"
+                            onClick={() => updateItem(idx, "mitarbeiter", Math.max(1, (item.mitarbeiter ?? 1) - 1))}
+                            className="px-2 py-1 text-xs font-bold"
+                            style={{ background: "#112240", color: "#8b9ab5" }}
+                          >−</button>
+                          <span className="px-3 py-1 text-xs font-bold text-center" style={{ background: "#0d1b2e", color: "#e6edf3", minWidth: 28 }}>
+                            {item.mitarbeiter ?? 1}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => updateItem(idx, "mitarbeiter", Math.min(20, (item.mitarbeiter ?? 1) + 1))}
+                            className="px-2 py-1 text-xs font-bold"
+                            style={{ background: "#112240", color: "#8b9ab5" }}
+                          >+</button>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => autoDescLohn(idx)}
+                          className="px-2 py-1 rounded-lg text-xs"
+                          style={{ background: "#00c6ff18", color: "#00c6ff", border: "1px solid #00c6ff33" }}
+                          title="Beschreibung automatisch ausfüllen"
+                        >↩ Beschr.</button>
+                      </div>
+                    )}
+                    {/* Zeile 3: Menge + Einheit + EP + Gesamt + Löschen */}
                     <div className="flex gap-2 items-center">
                       <input type="number" value={item.menge} onChange={(e) => updateItem(idx, "menge", parseFloat(e.target.value) || 0)} className="w-16 px-2 py-1.5 rounded-lg text-xs outline-none text-center" style={inputSty} />
                       <select value={item.einheit} onChange={(e) => updateItem(idx, "einheit", e.target.value)} className="px-2 py-1.5 rounded-lg text-xs outline-none" style={inputSty}>
                         {getEinheiten(item.typ).map((e) => <option key={e} value={e}>{e}</option>)}
                       </select>
                       <input type="number" value={item.einzelpreis} onChange={(e) => updateItem(idx, "einzelpreis", parseFloat(e.target.value) || 0)} placeholder="EP €" className="flex-1 px-2 py-1.5 rounded-lg text-xs outline-none" style={inputSty} />
+                      {item.typ === "lohn" && (item.mitarbeiter ?? 1) > 1 && (
+                        <span className="text-xs" style={{ color: "#8b9ab5", whiteSpace: "nowrap" }}>×{item.mitarbeiter}</span>
+                      )}
                       <div className="text-xs font-bold px-2 py-1.5 rounded-lg whitespace-nowrap" style={{ background: "#112240", color: "#00c6ff", border: "1px solid #1e3a5f", minWidth: 56 }}>
                         {(item.gesamt ?? 0).toFixed(2)} €
                       </div>
