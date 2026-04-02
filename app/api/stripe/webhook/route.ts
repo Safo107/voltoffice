@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { getDb } from "@/lib/mongodb";
 import type Stripe from "stripe";
+import type { Db } from "mongodb";
 
 export async function POST(req: NextRequest) {
   if (!stripe) {
@@ -25,57 +26,117 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Webhook Fehler: ${msg}` }, { status: 400 });
   }
 
-  let db;
+  let db: Db;
   try {
     db = await getDb();
   } catch {
     return NextResponse.json({ error: "Datenbankfehler" }, { status: 500 });
   }
 
+  /**
+   * Dreifache Fallback-Strategie:
+   * 1. userId aus Session-Metadata (zuverlässigste Methode)
+   * 2. stripeCustomerId → MongoDB Lookup
+   * 3. customer_email → MongoDB Lookup
+   * Gibt den DB-Filter zurück der den User findet.
+   */
+  async function resolveUserFilter(
+    metadata: Record<string, string> | null,
+    customerId?: string | null,
+    customerEmail?: string | null
+  ): Promise<Record<string, string> | null> {
+    // 1. userId / uid aus Metadata (uid = alter Key, userId = neuer Key)
+    const uid = metadata?.userId || metadata?.uid;
+    if (uid) {
+      console.log(`[webhook] Matched via metadata.userId=${uid}`);
+      return { uid };
+    }
+
+    // 2. stripeCustomerId
+    if (customerId) {
+      const found = await db.collection("users").findOne({ stripeCustomerId: customerId });
+      if (found?.uid) {
+        console.log(`[webhook] Matched via stripeCustomerId=${customerId}`);
+        return { uid: found.uid };
+      }
+    }
+
+    // 3. Email
+    if (customerEmail) {
+      const found = await db.collection("users").findOne({ email: customerEmail });
+      if (found?.uid) {
+        console.log(`[webhook] Matched via email=${customerEmail}`);
+        return { uid: found.uid };
+      }
+    }
+
+    console.error("[webhook] Kein User-Match! metadata=", metadata, "customerId=", customerId, "email=", customerEmail);
+    return null;
+  }
+
   switch (event.type) {
     case "checkout.session.completed": {
       const session = event.data.object as Stripe.Checkout.Session;
-      const uid = session.metadata?.uid;
-      if (uid) {
+
+      const filter = await resolveUserFilter(
+        session.metadata as Record<string, string> | null,
+        typeof session.customer === "string" ? session.customer : null,
+        session.customer_details?.email || session.customer_email
+      );
+
+      if (filter) {
+        const subId = typeof session.subscription === "string" ? session.subscription : null;
         await db.collection("users").updateOne(
-          { uid },
+          filter,
           {
             $set: {
               pro: true,
               subscriptionTier: "pro",
-              proSince: new Date(),
-              stripeSubscriptionId: session.subscription as string,
+              proSince: new Date().toISOString(),
+              ...(subId && { stripeSubscriptionId: subId }),
+              ...(typeof session.customer === "string" && { stripeCustomerId: session.customer }),
             },
           },
           { upsert: true }
         );
-        console.log(`✅ Pro aktiviert für uid=${uid}`);
+        console.log(`✅ Pro aktiviert für filter=`, filter);
       }
       break;
     }
 
     case "customer.subscription.deleted": {
       const subscription = event.data.object as Stripe.Subscription;
-      const uid = subscription.metadata?.uid;
-      if (uid) {
+
+      const filter = await resolveUserFilter(
+        subscription.metadata as Record<string, string> | null,
+        typeof subscription.customer === "string" ? subscription.customer : null,
+        null
+      );
+
+      if (filter) {
         await db.collection("users").updateOne(
-          { uid },
+          filter,
           { $set: { pro: false, subscriptionTier: "free", proSince: null, stripeSubscriptionId: null } }
         );
-        console.log(`❌ Pro deaktiviert für uid=${uid}`);
+        console.log(`❌ Pro deaktiviert für filter=`, filter);
       }
       break;
     }
 
     case "customer.subscription.updated": {
       const subscription = event.data.object as Stripe.Subscription;
-      const uid = subscription.metadata?.uid;
-      const isActive = subscription.status === "active";
-      // past_due / unpaid → Gnadenfrist, noch nicht downgraden
-      const shouldDowngrade = ["canceled", "incomplete_expired", "unpaid"].includes(subscription.status);
-      if (uid) {
+
+      const filter = await resolveUserFilter(
+        subscription.metadata as Record<string, string> | null,
+        typeof subscription.customer === "string" ? subscription.customer : null,
+        null
+      );
+
+      if (filter) {
+        const isActive = subscription.status === "active";
+        const shouldDowngrade = ["canceled", "incomplete_expired", "unpaid"].includes(subscription.status);
         await db.collection("users").updateOne(
-          { uid },
+          filter,
           {
             $set: {
               pro: isActive,
@@ -89,8 +150,6 @@ export async function POST(req: NextRequest) {
     }
 
     case "invoice.payment_failed": {
-      // Zahlung fehlgeschlagen – User bekommt E-Mail von Stripe automatisch
-      // Kein sofortiger Downgrade, Stripe versucht es erneut
       const invoice = event.data.object as Stripe.Invoice & { customer?: string };
       const customerId = typeof invoice.customer === "string" ? invoice.customer : null;
       if (customerId) {
