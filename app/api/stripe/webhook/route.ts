@@ -124,23 +124,40 @@ export async function POST(req: NextRequest) {
 
       if (filter) {
         const subId = typeof session.subscription === "string" ? session.subscription : null;
-        // Detect plan from metadata (set at checkout); fallback to "pro"
         const plan: "pro" | "business" = (meta?.plan === "business") ? "business" : "pro";
+
+        // Trial-Status aus der Subscription lesen
+        let inTrial = false;
+        let trialEndsAt: string | null = null;
+        if (subId) {
+          try {
+            const sub = await stripe.subscriptions.retrieve(subId);
+            inTrial = sub.status === "trialing";
+            if (sub.trial_end) {
+              trialEndsAt = new Date(sub.trial_end * 1000).toISOString();
+            }
+          } catch (e) {
+            console.warn("[webhook] Subscription-Abruf fehlgeschlagen:", e);
+          }
+        }
+
         await db.collection("users").updateOne(
           filter,
           {
             $set: {
               pro: true,
               plan,
-              subscriptionTier: plan,
+              subscriptionTier: inTrial ? "trial" : plan,
               proSince: new Date().toISOString(),
+              ...(inTrial && trialEndsAt && { trialEndsAt }),
+              ...(!inTrial && { trialEndsAt: null }),
               ...(subId && { stripeSubscriptionId: subId }),
               ...(typeof session.customer === "string" && { stripeCustomerId: session.customer }),
             },
           },
           { upsert: true }
         );
-        console.log(`✅ Plan "${plan}" aktiviert für filter=`, filter);
+        console.log(`✅ Plan "${plan}" (${inTrial ? "Trial bis " + trialEndsAt : "aktiv"}) für filter=`, filter);
       }
       break;
     }
@@ -175,21 +192,31 @@ export async function POST(req: NextRequest) {
       );
 
       if (filter) {
-        const isActive = subscription.status === "active" || subscription.status === "trialing";
-        const shouldDowngrade = ["canceled", "incomplete_expired", "unpaid"].includes(subscription.status);
-        // Determine plan from metadata stored at checkout
+        const status = subscription.status;
+        const isActive = status === "active" || status === "trialing";
+        const inTrial = status === "trialing";
+        const shouldDowngrade = ["canceled", "incomplete_expired", "unpaid"].includes(status);
         const plan: "pro" | "business" = (subMeta?.plan === "business") ? "business" : "pro";
+        const trialEndsAt = subscription.trial_end
+          ? new Date(subscription.trial_end * 1000).toISOString()
+          : null;
+
         await db.collection("users").updateOne(
           filter,
           {
             $set: {
               pro: isActive,
-              ...(isActive && { plan, subscriptionTier: plan }),
-              ...(shouldDowngrade && { plan: "free", subscriptionTier: "free" }),
-              stripeSubscriptionStatus: subscription.status,
+              stripeSubscriptionStatus: status,
+              ...(isActive && {
+                plan,
+                subscriptionTier: inTrial ? "trial" : plan,
+                ...(inTrial && trialEndsAt ? { trialEndsAt } : { trialEndsAt: null }),
+              }),
+              ...(shouldDowngrade && { plan: "free", subscriptionTier: "free", trialEndsAt: null }),
             },
           }
         );
+        console.log(`🔄 Subscription ${status} → tier=${inTrial ? "trial" : plan} für filter=`, filter);
       }
       break;
     }
