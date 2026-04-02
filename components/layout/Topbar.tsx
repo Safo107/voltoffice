@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Bell, Search, ChevronDown, User, Settings, LogOut, Info, X } from "lucide-react";
+import { Bell, ChevronDown, User, Settings, LogOut, Info, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 
@@ -63,15 +63,6 @@ export default function Topbar({ title, subtitle }: TopbarProps) {
 
       {/* Right side */}
       <div className="flex items-center gap-3">
-        {/* Search — nur Desktop */}
-        <div
-          className="hidden md:flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all"
-          style={{ background: "#0d1b2e", border: "1px solid #1e3a5f", color: "#8b9ab5", minWidth: "200px", cursor: "text" }}
-        >
-          <Search size={14} />
-          <span className="text-xs">Suchen...</span>
-        </div>
-
         {/* Notifications */}
         <div className="relative" ref={bellRef}>
           <button
