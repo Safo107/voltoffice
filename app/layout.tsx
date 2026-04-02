@@ -4,6 +4,7 @@ import { AuthProvider } from "@/context/AuthContext";
 import { ProProvider } from "@/context/ProContext";
 import Script from "next/script";
 import CookieBanner from "@/components/CookieBanner";
+import DomainGuard from "@/components/DomainGuard";
 
 export const metadata: Metadata = {
   title: "VoltOffice — ElektroGenius",
@@ -48,6 +49,7 @@ export default function RootLayout({
         `}</Script>
       </head>
       <body className="h-full">
+        <DomainGuard />
         <AuthProvider>
           <ProProvider>{children}</ProProvider>
         </AuthProvider>
