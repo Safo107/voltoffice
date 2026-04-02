@@ -15,6 +15,9 @@ import {
   Copy,
   AlertCircle,
   Loader,
+  Users,
+  UserPlus,
+  Crown,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -504,6 +507,68 @@ export default function EinstellungenPage() {
                   </div>
                 </div>
               </div>
+
+              {/* Firmenmitglieder */}
+              <div className="rounded-xl p-5" style={{ background: "#112240", border: "1px solid #1e3a5f" }}>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <Users size={15} style={{ color: "#8b9ab5" }} />
+                    <h3 className="text-sm font-semibold" style={{ color: "#e6edf3" }}>Firmenmitglieder</h3>
+                    <span className="text-xs px-2 py-0.5 rounded-full font-medium"
+                      style={{ background: "#1e3a5f", color: "#8b9ab5" }}>
+                      1 Mitglied
+                    </span>
+                  </div>
+                  {tier === "business" ? (
+                    <button
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all hover:opacity-90"
+                      style={{ background: "linear-gradient(135deg, #00c6ff, #0099cc)", color: "#0d1b2e" }}
+                    >
+                      <UserPlus size={12} />
+                      Einladen
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => router.push("/upgrade")}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all hover:opacity-90"
+                      style={{ background: "#1e3a5f", color: "#8b9ab5", border: "1px solid #2a4a6f" }}
+                    >
+                      <Crown size={11} />
+                      Business
+                    </button>
+                  )}
+                </div>
+
+                {/* Owner row */}
+                <div
+                  className="flex items-center gap-3 p-3 rounded-xl"
+                  style={{ background: "#0d1b2e", border: "1px solid #1e3a5f" }}
+                >
+                  <div
+                    className="flex items-center justify-center w-9 h-9 rounded-full shrink-0 text-sm font-bold"
+                    style={{ background: "linear-gradient(135deg, #00c6ff22, #00c6ff11)", border: "1px solid #00c6ff33", color: "#00c6ff" }}
+                  >
+                    {(user?.displayName || user?.email || "?")[0].toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate" style={{ color: "#e6edf3" }}>
+                      {user?.displayName || user?.email?.split("@")[0] || "Inhaber"}
+                    </p>
+                    <p className="text-xs truncate" style={{ color: "#8b9ab5" }}>{user?.email || ""}</p>
+                  </div>
+                  <span className="text-xs px-2 py-0.5 rounded-full shrink-0 font-medium"
+                    style={{ background: "rgba(245,166,35,0.12)", color: "#f5a623", border: "1px solid rgba(245,166,35,0.2)" }}>
+                    Inhaber
+                  </span>
+                </div>
+
+                {tier !== "business" && (
+                  <p className="text-xs mt-3 text-center" style={{ color: "#4a5568" }}>
+                    Mit dem <button onClick={() => router.push("/upgrade")} className="underline" style={{ color: "#8b9ab5" }}>Business-Plan</button> kannst du Mitarbeiter einladen und Zugriffsrechte vergeben.
+                  </p>
+                )}
+              </div>
+
             </div>
           )}
 
