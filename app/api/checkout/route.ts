@@ -6,11 +6,9 @@ type Plan = "pro" | "business";
 
 function getPriceId(plan: Plan): string {
   if (plan === "business") {
-    return process.env.STRIPE_PRICE_ID_BUSINESS || "";
+    return process.env.STRIPE_PRICE_BUSINESS || "";
   }
-  // "pro" — 19,99€/Monat (STRIPE_PRICE_ID_PRO muss in Vercel gesetzt sein)
-  // Note: legacy STRIPE_PRICE_ID (9,99€) is kept in .env for grandfathered subscribers only
-  return process.env.STRIPE_PRICE_ID_PRO || "";
+  return process.env.STRIPE_PRICE_PRO || "";
 }
 
 export async function POST(req: NextRequest) {
@@ -20,8 +18,8 @@ export async function POST(req: NextRequest) {
 
   // Frühe Validierung: alle Preis-IDs prüfen bevor wir anfangen
   const missingEnvVars: string[] = [];
-  if (!process.env.STRIPE_PRICE_ID_PRO) missingEnvVars.push("STRIPE_PRICE_ID_PRO");
-  if (!process.env.STRIPE_PRICE_ID_BUSINESS) missingEnvVars.push("STRIPE_PRICE_ID_BUSINESS");
+  if (!process.env.STRIPE_PRICE_PRO) missingEnvVars.push("STRIPE_PRICE_PRO");
+  if (!process.env.STRIPE_PRICE_BUSINESS) missingEnvVars.push("STRIPE_PRICE_BUSINESS");
   if (missingEnvVars.length > 0) {
     console.error("[checkout] Fehlende Stripe Preis-IDs:", missingEnvVars.join(", "), "— bitte in Vercel Environment Variables setzen.");
     return NextResponse.json(
