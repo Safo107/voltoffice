@@ -94,21 +94,24 @@ export default function EinstellungenPage() {
 
   return (
     <DashboardLayout title="Einstellungen" subtitle="Konto & Betrieb verwalten">
-      <div className="flex gap-4">
-        {/* Sidebar */}
+      <div className="flex flex-col md:flex-row gap-4">
+        {/* Sidebar / Tab-Nav */}
         <div
-          className="w-56 shrink-0 rounded-xl overflow-hidden"
+          className="md:w-56 md:shrink-0 rounded-xl overflow-hidden"
           style={{ background: "#112240", border: "1px solid #1e3a5f", alignSelf: "flex-start" }}
         >
+          {/* Mobile: horizontal scroll tabs */}
+          <div className="flex md:flex-col overflow-x-auto md:overflow-visible" style={{ scrollbarWidth: "none" }}>
           {sections.map((s) => (
             <button
               key={s.id}
               onClick={() => setActive(s.id)}
-              className="w-full flex items-center gap-3 px-4 py-3 text-sm transition-all"
+              className="flex items-center gap-2 md:gap-3 px-3 md:px-4 py-3 text-xs md:text-sm transition-all shrink-0 md:w-full"
               style={{
                 background: active === s.id ? "#00c6ff0f" : "transparent",
                 borderLeft: active === s.id ? `3px solid ${s.color}` : "3px solid transparent",
                 color: active === s.id ? "#e6edf3" : "#8b9ab5",
+                whiteSpace: "nowrap",
               }}
               onMouseEnter={(e) => {
                 if (active !== s.id) {
@@ -126,14 +129,15 @@ export default function EinstellungenPage() {
               <span style={{ color: active === s.id ? s.color : "inherit" }}>{s.icon}</span>
               {s.label}
               {active === s.id && (
-                <ChevronRight size={13} className="ml-auto" style={{ color: s.color }} />
+                <ChevronRight size={13} className="ml-auto hidden md:block" style={{ color: s.color }} />
               )}
             </button>
           ))}
+          </div>
         </div>
 
         {/* Content */}
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
 
           {/* ── Profil ── */}
           {active === "profil" && (

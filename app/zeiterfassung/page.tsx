@@ -16,6 +16,8 @@ interface TimeEntry {
   projektName: string;
   taetigkeit: string;
   mitarbeiter: string;
+  mitarbeiterId?: string;
+  mitarbeiterRolle?: string;
   date: string;
   hours: number;
   description?: string;
@@ -23,6 +25,7 @@ interface TimeEntry {
 }
 
 interface Projekt { _id: string; title: string; customerName: string; }
+interface MitarbeiterEintrag { _id: string; name: string; rolle: string; stundensatz: number; aktiv: boolean; }
 
 const TAETIGKEITEN = ["Installation", "Wartung", "Planung", "Messung", "Dokumentation", "Sonstiges"];
 
@@ -56,6 +59,7 @@ export default function ZeiterfassungPage() {
   const [entries, setEntries] = useState<TimeEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [projekte, setProjekte] = useState<Projekt[]>([]);
+  const [mitarbeiterListe, setMitarbeiterListe] = useState<MitarbeiterEintrag[]>([]);
 
   // Timer
   const [timerRunning, setTimerRunning] = useState(false);
@@ -64,6 +68,9 @@ export default function ZeiterfassungPage() {
   const [timerProjektId, setTimerProjektId] = useState("");
   const [timerTaetigkeit, setTimerTaetigkeit] = useState("Installation");
   const [timerMitarbeiter, setTimerMitarbeiter] = useState("");
+  const [timerMitarbeiterId, setTimerMitarbeiterId] = useState("");
+  const [timerMitarbeiterRolle, setTimerMitarbeiterRolle] = useState("");
+  const [timerStundensatz, setTimerStundensatz] = useState(65);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Save-after-stop modal
@@ -85,6 +92,7 @@ export default function ZeiterfassungPage() {
   useEffect(() => {
     fetchEntries();
     fetchProjekte();
+    fetchMitarbeiter();
     restoreTimer();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -130,6 +138,19 @@ export default function ZeiterfassungPage() {
     } catch { /* */ }
   };
 
+  const fetchMitarbeiter = async () => {
+    try {
+      const res = await fetch("/api/mitarbeiter");
+      const data = await res.json();
+      setMitarbeiterListe(Array.isArray(data) ? data.filter((m: MitarbeiterEintrag) => m.aktiv) : []);
+    } catch { /* */ }
+  };
+
+  const selectMitarbeiter = (name: string, setter: (f: Omit<TimeEntry, "_id">) => void, form: Omit<TimeEntry, "_id">) => {
+    const found = mitarbeiterListe.find((m) => m.name === name);
+    setter({ ...form, mitarbeiter: name, mitarbeiterId: found?._id || "", mitarbeiterRolle: found?.rolle || "", stundensatz: found?.stundensatz ?? form.stundensatz });
+  };
+
   const startTimer = () => {
     const stored: StoredTimer = {
       startedAt: Date.now() - timerSeconds * 1000,
@@ -151,10 +172,12 @@ export default function ZeiterfassungPage() {
       projektName: timerProjekt,
       taetigkeit: timerTaetigkeit,
       mitarbeiter: timerMitarbeiter,
+      mitarbeiterId: timerMitarbeiterId,
+      mitarbeiterRolle: timerMitarbeiterRolle,
       date: new Date().toISOString().split("T")[0],
       hours,
       description: "",
-      stundensatz: 65,
+      stundensatz: timerStundensatz,
     });
     setTimerSeconds(0);
     setSaveModalOpen(true);
@@ -201,15 +224,30 @@ export default function ZeiterfassungPage() {
   const createInvoice = async () => {
     setInvoiceSaving(true);
     try {
-      const items = selectedData.map((e) => ({
-        beschreibung: `${e.taetigkeit}${e.projektName ? ` – ${e.projektName}` : ""}${e.mitarbeiter ? ` (${e.mitarbeiter})` : ""}`,
-        menge: e.hours,
-        einheit: "Std.",
-        einzelpreis: invoiceStundensatz,
-        gesamt: e.hours * invoiceStundensatz,
-        typ: "lohn" as const,
-        mitarbeiter: 1,
-      }));
+      // Gruppe nach Rolle + Stundensatz → eine Position pro Gruppe
+      type Group = { rolle: string; stundensatz: number; hours: number; count: number; projektName: string; };
+      const groups: Record<string, Group> = {};
+      for (const e of selectedData) {
+        const rolle = e.mitarbeiterRolle || e.taetigkeit || "Sonstiges";
+        const rate = e.stundensatz || invoiceStundensatz;
+        const gKey = `${rolle}::${rate}`;
+        if (!groups[gKey]) groups[gKey] = { rolle, stundensatz: rate, hours: 0, count: 0, projektName: e.projektName || "" };
+        groups[gKey].hours += e.hours;
+        groups[gKey].count += 1;
+      }
+      const items = Object.values(groups).map((g) => {
+        const anzahl = g.count > 1 ? ` (${g.count} Mitarbeiter)` : "";
+        const projekt = g.projektName ? ` – ${g.projektName}` : "";
+        return {
+          beschreibung: `Arbeitszeit ${g.rolle}${anzahl}${projekt}`,
+          menge: g.hours,
+          einheit: "Std.",
+          einzelpreis: g.stundensatz,
+          gesamt: g.hours * g.stundensatz,
+          typ: "lohn" as const,
+          mitarbeiter: g.count,
+        };
+      });
       const total = items.reduce((s, i) => s + i.gesamt, 0);
       const res = await fetch("/api/rechnungen", {
         method: "POST",
@@ -342,13 +380,27 @@ export default function ZeiterfassungPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium mb-1" style={{ color: "#8b9ab5" }}>Mitarbeiter</label>
-                  <input value={timerMitarbeiter} onChange={(e) => setTimerMitarbeiter(e.target.value)}
+                  <label className="block text-xs font-medium mb-1" style={{ color: "#8b9ab5" }}>
+                    Mitarbeiter{timerMitarbeiterRolle && <span className="ml-1 font-normal" style={{ color: "#4a6fa5" }}>({timerMitarbeiterRolle})</span>}
+                  </label>
+                  <input
+                    list="ma-dl-timer"
+                    value={timerMitarbeiter}
+                    onChange={(e) => {
+                      const found = mitarbeiterListe.find((m) => m.name === e.target.value);
+                      setTimerMitarbeiter(e.target.value);
+                      setTimerMitarbeiterId(found?._id || "");
+                      setTimerMitarbeiterRolle(found?.rolle || "");
+                      if (found) setTimerStundensatz(found.stundensatz);
+                    }}
                     placeholder="Name…"
                     className="w-full px-3 py-2 rounded-xl text-sm outline-none" style={inputSty}
                     onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
                     onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
                   />
+                  <datalist id="ma-dl-timer">
+                    {mitarbeiterListe.map((m) => <option key={m._id} value={m.name} label={`${m.rolle} · ${m.stundensatz}€/h`} />)}
+                  </datalist>
                 </div>
               </div>
             </div>
@@ -620,14 +672,21 @@ export default function ZeiterfassungPage() {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Mitarbeiter</label>
-              <input value={manualForm.mitarbeiter}
-                onChange={(e) => setManualForm({ ...manualForm, mitarbeiter: e.target.value })}
+              <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>
+                Mitarbeiter{manualForm.mitarbeiterRolle && <span className="ml-1 font-normal" style={{ color: "#4a6fa5" }}>({manualForm.mitarbeiterRolle})</span>}
+              </label>
+              <input
+                list="ma-dl-manual"
+                value={manualForm.mitarbeiter}
+                onChange={(e) => selectMitarbeiter(e.target.value, setManualForm, manualForm)}
                 placeholder="Name…"
                 className="w-full px-3 py-2.5 rounded-xl text-sm outline-none" style={inputSty}
                 onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
                 onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
               />
+              <datalist id="ma-dl-manual">
+                {mitarbeiterListe.map((m) => <option key={m._id} value={m.name} label={`${m.rolle} · ${m.stundensatz}€/h`} />)}
+              </datalist>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -713,21 +772,33 @@ export default function ZeiterfassungPage() {
             />
           </div>
           <div className="rounded-xl p-3 space-y-2" style={{ background: "#0d1b2e", border: "1px solid #1e3a5f" }}>
-            <p className="text-xs font-medium mb-2" style={{ color: "#4a6fa5" }}>Vorschau Positionen:</p>
-            {selectedData.map((e, i) => (
-              <div key={i} className="flex items-center justify-between text-xs gap-2">
-                <span className="flex-1 truncate" style={{ color: "#8b9ab5" }}>
-                  {e.taetigkeit}{e.projektName ? ` – ${e.projektName}` : ""}{e.mitarbeiter ? ` (${e.mitarbeiter})` : ""}
-                </span>
-                <span className="shrink-0 font-medium" style={{ color: "#e6edf3" }}>
-                  {e.hours}h × {invoiceStundensatz}€ = {(e.hours * invoiceStundensatz).toFixed(2)}€
-                </span>
-              </div>
-            ))}
+            <p className="text-xs font-medium mb-2" style={{ color: "#4a6fa5" }}>Vorschau Positionen (gruppiert nach Rolle):</p>
+            {(() => {
+              type PGroup = { rolle: string; stundensatz: number; hours: number; count: number; projekt: string; };
+              const grp: Record<string, PGroup> = {};
+              for (const e of selectedData) {
+                const rolle = e.mitarbeiterRolle || e.taetigkeit || "Sonstiges";
+                const rate = e.stundensatz || invoiceStundensatz;
+                const k = `${rolle}::${rate}`;
+                if (!grp[k]) grp[k] = { rolle, stundensatz: rate, hours: 0, count: 0, projekt: e.projektName || "" };
+                grp[k].hours += e.hours;
+                grp[k].count += 1;
+              }
+              return Object.values(grp).map((g, i) => (
+                <div key={i} className="flex items-center justify-between text-xs gap-2">
+                  <span className="flex-1 truncate" style={{ color: "#8b9ab5" }}>
+                    Arbeitszeit {g.rolle}{g.count > 1 ? ` (${g.count} MA)` : ""}{g.projekt ? ` – ${g.projekt}` : ""}
+                  </span>
+                  <span className="shrink-0 font-medium" style={{ color: "#e6edf3" }}>
+                    {g.hours}h × {g.stundensatz}€ = {(g.hours * g.stundensatz).toFixed(2)}€
+                  </span>
+                </div>
+              ));
+            })()}
             <div className="flex justify-between pt-2" style={{ borderTop: "1px solid #1e3a5f" }}>
               <span className="text-xs font-bold" style={{ color: "#e6edf3" }}>Gesamtbetrag:</span>
               <span className="text-sm font-bold" style={{ color: "#00c6ff" }}>
-                {selectedData.reduce((s, e) => s + e.hours * invoiceStundensatz, 0).toFixed(2)} €
+                {selectedData.reduce((s, e) => s + e.hours * (e.stundensatz || invoiceStundensatz), 0).toFixed(2)} €
               </span>
             </div>
           </div>

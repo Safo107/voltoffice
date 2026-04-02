@@ -6,7 +6,7 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 import Modal from "@/components/ui/Modal";
 import EmptyState from "@/components/ui/EmptyState";
 import { usePro } from "@/context/ProContext";
-import { Briefcase, Plus, Search, MoreVertical, Calendar, User, AlertCircle, Trash2, Edit, Home, Building2, Factory, Package, X, Check } from "lucide-react";
+import { Briefcase, Plus, Search, MoreVertical, Calendar, User, AlertCircle, Trash2, Edit, Home, Building2, Factory, Package, X, Check, Euro, TrendingUp, TrendingDown } from "lucide-react";
 import SkeletonCard from "@/components/ui/SkeletonCard";
 
 interface Project {
@@ -55,6 +55,12 @@ export default function ProjektePage() {
   const [materialLoading, setMaterialLoading] = useState(false);
   const [matForm, setMatForm] = useState({ name: "", menge: 1, einheit: "Stk.", preis: 0 });
   const [matSaving, setMatSaving] = useState(false);
+
+  // Gewinnberechnung
+  const [gewinnModalOpen, setGewinnModalOpen] = useState(false);
+  const [gewinnProjekt, setGewinnProjekt] = useState<Project | null>(null);
+  const [gewinnLoading, setGewinnLoading] = useState(false);
+  const [gewinnData, setGewinnData] = useState<{ umsatz: number; zeitkosten: number; materialkosten: number } | null>(null);
 
   useEffect(() => { fetchProjekte(); }, []);
 
@@ -167,6 +173,39 @@ export default function ProjektePage() {
     } catch { /* */ }
   };
 
+  const openGewinn = async (p: Project) => {
+    setGewinnProjekt(p);
+    setGewinnData(null);
+    setGewinnModalOpen(true);
+    setMenuOpen(null);
+    setGewinnLoading(true);
+    try {
+      const [rechRes, zeitRes, matRes] = await Promise.all([
+        fetch("/api/rechnungen"),
+        fetch("/api/zeiterfassung"),
+        fetch(`/api/material?projektId=${p._id}`),
+      ]);
+      const [rechnungen, zeiten, materialItems] = await Promise.all([
+        rechRes.json(), zeitRes.json(), matRes.json(),
+      ]);
+      const projRechnungen = (Array.isArray(rechnungen) ? rechnungen : []).filter(
+        (r: { projektId?: string; total?: number }) => r.projektId === String(p._id)
+      );
+      const projZeiten = (Array.isArray(zeiten) ? zeiten : []).filter(
+        (z: { projektId?: string }) => z.projektId === String(p._id)
+      );
+      const umsatz = projRechnungen.reduce((s: number, r: { total?: number }) => s + (r.total || 0), 0);
+      const zeitkosten = projZeiten.reduce(
+        (s: number, z: { hours?: number; stundensatz?: number }) => s + (z.hours || 0) * (z.stundensatz || 65), 0
+      );
+      const materialkosten = (Array.isArray(materialItems) ? materialItems : [])
+        .filter((m: { verbraucht?: boolean; preis?: number; menge?: number }) => m.verbraucht)
+        .reduce((s: number, m: { preis?: number; menge?: number }) => s + (m.preis || 0) * (m.menge || 0), 0);
+      setGewinnData({ umsatz, zeitkosten, materialkosten });
+    } catch { /* */ }
+    finally { setGewinnLoading(false); }
+  };
+
   const handleDelete = async (p: Project) => {
     if (!confirm(`Projekt "${p.title}" wirklich löschen?`)) return;
     try {
@@ -277,6 +316,12 @@ export default function ProjektePage() {
                           onMouseEnter={(e) => { e.currentTarget.style.background = "#f5a62318"; }}
                           onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
                           <Package size={13} /> Material verwalten
+                        </button>
+                        <button onClick={() => openGewinn(project)}
+                          className="flex items-center gap-2 w-full px-4 py-2 text-sm transition-all" style={{ color: "#00c6ff" }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = "#00c6ff18"; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
+                          <Euro size={13} /> Projektkennzahlen
                         </button>
                         <button onClick={() => handleDelete(project)}
                           className="flex items-center gap-2 w-full px-4 py-2 text-sm transition-all" style={{ color: "#ef4444" }}
@@ -419,6 +464,63 @@ export default function ProjektePage() {
           </div>
         </form>
       </Modal>
+      {/* Gewinnberechnung Modal */}
+      <Modal
+        open={gewinnModalOpen}
+        onClose={() => setGewinnModalOpen(false)}
+        title={`Projektkennzahlen – ${gewinnProjekt?.title || ""}`}
+        maxWidth="460px"
+      >
+        {gewinnLoading ? (
+          <div className="flex justify-center py-10" style={{ color: "#4a6fa5" }}>Berechnung läuft…</div>
+        ) : gewinnData ? (() => {
+          const gesamtkosten = gewinnData.zeitkosten + gewinnData.materialkosten;
+          const gewinn = gewinnData.umsatz - gesamtkosten;
+          const marge = gewinnData.umsatz > 0 ? (gewinn / gewinnData.umsatz) * 100 : 0;
+          const positiv = gewinn >= 0;
+          return (
+            <div className="space-y-3">
+              {[
+                { label: "Umsatz (Rechnungen)", value: gewinnData.umsatz, color: "#00c6ff", note: "Summe aller Projektrechnungen" },
+                { label: "Mitarbeiterkosten", value: -gewinnData.zeitkosten, color: "#f5a623", note: "Zeiten × Stundensatz" },
+                { label: "Materialkosten", value: -gewinnData.materialkosten, color: "#ef4444", note: "Verbrauchtes Material" },
+              ].map((row) => (
+                <div key={row.label} className="flex items-center justify-between px-4 py-3 rounded-xl"
+                  style={{ background: "#0d1b2e", border: "1px solid #1e3a5f" }}>
+                  <div>
+                    <p className="text-sm font-medium" style={{ color: "#e6edf3" }}>{row.label}</p>
+                    <p className="text-xs" style={{ color: "#4a6fa5" }}>{row.note}</p>
+                  </div>
+                  <span className="text-base font-bold" style={{ color: row.color }}>
+                    {row.value >= 0 ? "+" : ""}{row.value.toFixed(2)} €
+                  </span>
+                </div>
+              ))}
+              <div className="flex items-center justify-between px-4 py-4 rounded-xl"
+                style={{ background: positiv ? "#22c55e0f" : "#ef44440f", border: `1px solid ${positiv ? "#22c55e33" : "#ef444433"}` }}>
+                <div className="flex items-center gap-2">
+                  {positiv ? <TrendingUp size={18} style={{ color: "#22c55e" }} /> : <TrendingDown size={18} style={{ color: "#ef4444" }} />}
+                  <div>
+                    <p className="text-sm font-bold" style={{ color: "#e6edf3" }}>Gewinn / Verlust</p>
+                    <p className="text-xs" style={{ color: "#4a6fa5" }}>Marge: {marge.toFixed(1)}%</p>
+                  </div>
+                </div>
+                <span className="text-xl font-bold" style={{ color: positiv ? "#22c55e" : "#ef4444" }}>
+                  {positiv ? "+" : ""}{gewinn.toFixed(2)} €
+                </span>
+              </div>
+              {gewinnData.umsatz === 0 && (
+                <p className="text-xs text-center" style={{ color: "#4a6fa5" }}>
+                  Noch keine Rechnungen mit diesem Projekt verknüpft.
+                </p>
+              )}
+            </div>
+          );
+        })() : (
+          <p className="text-sm text-center py-6" style={{ color: "#8b9ab5" }}>Keine Daten verfügbar.</p>
+        )}
+      </Modal>
+
       {/* Material Modal */}
       <Modal
         open={materialModalOpen}

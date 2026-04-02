@@ -8,7 +8,7 @@ import { usePro } from "@/context/ProContext";
 import { useRouter } from "next/navigation";
 import { UserCheck, Plus, Search, MoreVertical, Trash2, Edit, Loader, Lock, Zap, Mail, Phone, Euro } from "lucide-react";
 
-const ROLLEN = ["Elektriker", "Meister", "Azubi", "Bauleiter", "Monteur", "Projektleiter", "Sonstige"];
+const ROLLEN = ["Elektriker", "Geselle", "Meister", "Azubi", "Bauleiter", "Monteur", "Projektleiter", "Sonstige"];
 
 interface Mitarbeiter {
   _id?: string;
@@ -119,17 +119,38 @@ export default function MitarbeiterPage() {
       </div>
 
       {liste.length > 0 && (
-        <div className="grid grid-cols-3 gap-3 mb-6">
-          {[
-            { label: "Gesamt", value: String(liste.length), color: "#00c6ff" },
-            { label: "Aktiv", value: String(liste.filter((m) => m.aktiv).length), color: "#22c55e" },
-            { label: "Ø Stundensatz", value: liste.length ? Math.round(liste.reduce((s, m) => s + m.stundensatz, 0) / liste.length) + " €/h" : "–", color: "#f5a623" },
-          ].map((s) => (
-            <div key={s.label} className="rounded-xl p-4 text-center" style={{ background: "#112240", border: "1px solid #1e3a5f" }}>
-              <p className="text-xl font-bold" style={{ color: s.color, fontFamily: "var(--font-syne)" }}>{s.value}</p>
-              <p className="text-xs" style={{ color: "#8b9ab5" }}>{s.label}</p>
+        <div className="space-y-3 mb-6">
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { label: "Gesamt", value: String(liste.length), color: "#00c6ff" },
+              { label: "Aktiv", value: String(liste.filter((m) => m.aktiv).length), color: "#22c55e" },
+            ].map((s) => (
+              <div key={s.label} className="rounded-xl p-4 text-center" style={{ background: "#112240", border: "1px solid #1e3a5f" }}>
+                <p className="text-xl font-bold" style={{ color: s.color, fontFamily: "var(--font-syne)" }}>{s.value}</p>
+                <p className="text-xs" style={{ color: "#8b9ab5" }}>{s.label}</p>
+              </div>
+            ))}
+          </div>
+          {/* Stundensatz pro Rolle */}
+          <div className="rounded-xl p-4" style={{ background: "#112240", border: "1px solid #1e3a5f" }}>
+            <p className="text-xs font-medium mb-3" style={{ color: "#4a6fa5" }}>Stundensätze nach Rolle</p>
+            <div className="flex flex-wrap gap-2">
+              {Array.from(new Set(liste.map((m) => m.rolle))).map((rolle) => {
+                const perRolle = liste.filter((m) => m.rolle === rolle);
+                const avg = Math.round(perRolle.reduce((s, m) => s + m.stundensatz, 0) / perRolle.length);
+                return (
+                  <div key={rolle} className="flex items-center gap-2 px-3 py-1.5 rounded-lg"
+                    style={{ background: "#0d1b2e", border: "1px solid #1e3a5f" }}>
+                    <span className="text-xs" style={{ color: "#8b9ab5" }}>{rolle}</span>
+                    <span className="text-sm font-bold" style={{ color: "#f5a623" }}>{avg} €/h</span>
+                    {perRolle.length > 1 && (
+                      <span className="text-xs" style={{ color: "#4a6fa5" }}>({perRolle.length}×)</span>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-          ))}
+          </div>
         </div>
       )}
 
