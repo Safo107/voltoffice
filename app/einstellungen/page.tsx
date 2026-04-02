@@ -54,6 +54,7 @@ export default function EinstellungenPage() {
   const { isPro, isTrial, trialDaysLeft, tier, loadingPro, hasStripeCustomer, lastPaymentFailed, proSince, refreshPro } = usePro();
   const [active, setActive] = useState("profil");
   const [portalLoading, setPortalLoading] = useState(false);
+  const [portalError, setPortalError] = useState("");
 
   // Profil
   const [companyName, setCompanyName] = useState("Musterbetrieb GmbH");
@@ -106,20 +107,23 @@ export default function EinstellungenPage() {
 
   const openPortal = async () => {
     setPortalLoading(true);
+    setPortalError("");
     try {
       const res = await authFetch("/api/stripe/customer-portal", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ returnUrl: window.location.href }),
+        body: JSON.stringify({ returnUrl: `${window.location.origin}/einstellungen` }),
       });
       const data = await res.json();
       if (res.ok && data.url) {
         window.location.href = data.url;
       } else {
-        alert(data.error || "Portal konnte nicht geöffnet werden.");
+        setPortalError(data.error || "Verbindung zum Zahlungsanbieter fehlgeschlagen.");
+        setTimeout(() => setPortalError(""), 8000);
       }
     } catch {
-      alert("Verbindungsfehler. Bitte erneut versuchen.");
+      setPortalError("Netzwerkfehler – bitte Internetverbindung prüfen und erneut versuchen.");
+      setTimeout(() => setPortalError(""), 8000);
     } finally {
       setPortalLoading(false);
     }
@@ -826,15 +830,23 @@ export default function EinstellungenPage() {
                       )}
                     </div>
                     {(tier === "pro" || tier === "business") && (
-                      <button
-                        onClick={openPortal}
-                        disabled={portalLoading || !hasStripeCustomer}
-                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all hover:opacity-90 disabled:opacity-50 shrink-0"
-                        style={{ background: "linear-gradient(135deg, #00c6ff, #0099cc)", color: "#0d1b2e" }}
-                      >
-                        {portalLoading ? <Loader size={14} className="animate-spin" /> : <CreditCard size={14} />}
-                        {portalLoading ? "Wird geöffnet…" : "Abo verwalten"}
-                      </button>
+                      <div className="flex flex-col items-end gap-2 shrink-0">
+                        <button
+                          onClick={openPortal}
+                          disabled={portalLoading || !hasStripeCustomer}
+                          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all hover:opacity-90 disabled:opacity-50"
+                          style={{ background: "linear-gradient(135deg, #00c6ff, #0099cc)", color: "#0d1b2e" }}
+                        >
+                          {portalLoading ? <Loader size={14} className="animate-spin" /> : <CreditCard size={14} />}
+                          {portalLoading ? "Wird geöffnet…" : "Abo verwalten"}
+                        </button>
+                        {portalError && (
+                          <div className="flex items-start gap-2 rounded-lg px-3 py-2 text-xs max-w-xs text-right" style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", color: "#ef4444" }}>
+                            <AlertCircle size={13} className="shrink-0 mt-0.5" />
+                            <span>{portalError}</span>
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
                 )}
