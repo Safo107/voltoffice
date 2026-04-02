@@ -28,7 +28,7 @@ export default function ImpressumPage() {
         <h1 className="text-3xl font-bold mb-2" style={{ fontFamily: "var(--font-syne)", color: "#e6edf3" }}>
           Impressum
         </h1>
-        <p className="text-sm mb-10" style={{ color: "#8b9ab5" }}>Angaben gemäß § 5 TMG</p>
+        <p className="text-sm mb-10" style={{ color: "#8b9ab5" }}>Angaben gemäß § 5 TMG — Stand: April 2026</p>
 
         <section className="mb-8">
           <h2 className="text-base font-semibold mb-3" style={{ color: "#00c6ff" }}>Anbieter</h2>
@@ -50,11 +50,66 @@ export default function ImpressumPage() {
         </section>
 
         <section className="mb-8">
-          <h2 className="text-base font-semibold mb-3" style={{ color: "#00c6ff" }}>Plattform</h2>
-          <div className="rounded-xl p-5 text-sm leading-relaxed" style={{ background: "#112240", border: "1px solid #1e3a5f", color: "#c8dff0" }}>
+          <h2 className="text-base font-semibold mb-3" style={{ color: "#00c6ff" }}>Online-Dienst & Subdomain</h2>
+          <div className="rounded-xl p-5 text-sm leading-relaxed space-y-3" style={{ background: "#112240", border: "1px solid #1e3a5f", color: "#c8dff0" }}>
+            <p>
+              <strong style={{ color: "#e6edf3" }}>VoltOffice</strong> ist eine webbasierte SaaS-Anwendung (Software as a Service) für Elektrobetriebe und wird unter folgender Adresse betrieben:
+            </p>
             <p>
               <a href="https://voltoffice.elektrogenius.de" className="transition-opacity hover:opacity-70" style={{ color: "#00c6ff" }}>
                 https://voltoffice.elektrogenius.de
+              </a>
+            </p>
+            <p>
+              Diese Adresse ist eine <strong style={{ color: "#e6edf3" }}>Subdomain</strong> der Hauptdomain{" "}
+              <a href="https://elektrogenius.de" className="transition-opacity hover:opacity-70" style={{ color: "#00c6ff" }}>elektrogenius.de</a>{" "}
+              und befindet sich im vollständigen Eigentum von Safin Deler Yezdin Al Ali. Subdomains sind technische Unterbereiche einer Domain (z. B. <em>subdomain.elektrogenius.de</em>) und unterliegen denselben rechtlichen Rahmenbedingungen wie die Hauptdomain.
+            </p>
+          </div>
+        </section>
+
+        <section className="mb-8">
+          <h2 className="text-base font-semibold mb-3" style={{ color: "#00c6ff" }}>Weitere Dienste unter elektrogenius.de</h2>
+          <div className="rounded-xl p-5 text-sm leading-relaxed space-y-2" style={{ background: "#112240", border: "1px solid #1e3a5f", color: "#c8dff0" }}>
+            <p className="mb-2">Alle nachfolgenden Angebote werden vom selben Anbieter (Safin Deler Yezdin Al Ali) unter der Domain elektrogenius.de betrieben:</p>
+            <p>
+              <strong style={{ color: "#e6edf3" }}>Hauptseite:</strong>{" "}
+              <a href="https://elektrogenius.de" className="transition-opacity hover:opacity-70" style={{ color: "#00c6ff" }}>elektrogenius.de</a>
+            </p>
+            <p>
+              <strong style={{ color: "#e6edf3" }}>VoltOffice (diese App):</strong>{" "}
+              <a href="https://voltoffice.elektrogenius.de" className="transition-opacity hover:opacity-70" style={{ color: "#00c6ff" }}>voltoffice.elektrogenius.de</a>{" "}
+              — Handwerkersoftware (SaaS) für Elektrobetriebe
+            </p>
+            <p>
+              <strong style={{ color: "#e6edf3" }}>Coaching:</strong>{" "}
+              <a href="https://coaching.elektrogenius.de" className="transition-opacity hover:opacity-70" style={{ color: "#00c6ff" }}>coaching.elektrogenius.de</a>{" "}
+              — Bewerbungs- & Karrierecoaching für die Elektrobranche
+            </p>
+            <p>
+              <strong style={{ color: "#e6edf3" }}>MaterialCheck Web-App:</strong>{" "}
+              <a href="https://app.elektrogenius.de" className="transition-opacity hover:opacity-70" style={{ color: "#00c6ff" }}>app.elektrogenius.de</a>{" "}
+              — Materialverwaltung für Elektrobetriebe
+            </p>
+            <p>
+              <strong style={{ color: "#e6edf3" }}>Lernportal:</strong>{" "}
+              <a href="https://lernportal.elektrogenius.de" className="transition-opacity hover:opacity-70" style={{ color: "#00c6ff" }}>lernportal.elektrogenius.de</a>{" "}
+              — Lern- & Wissensplattform
+            </p>
+          </div>
+        </section>
+
+        <section className="mb-8">
+          <h2 className="text-base font-semibold mb-3" style={{ color: "#00c6ff" }}>Zahlungsabwicklung</h2>
+          <div className="rounded-xl p-5 text-sm leading-relaxed space-y-2" style={{ background: "#112240", border: "1px solid #1e3a5f", color: "#c8dff0" }}>
+            <p>
+              Die Zahlungsabwicklung für kostenpflichtige VoltOffice-Abonnements (Pro- und Business-Plan) erfolgt über{" "}
+              <strong style={{ color: "#e6edf3" }}>Stripe</strong> (Stripe Payments Europe, Ltd., 1 Grand Canal Street Lower, Grand Canal Dock, Dublin, D02 H210, Irland).
+            </p>
+            <p>
+              Stripe verarbeitet Zahlungsdaten (Kreditkartendaten, Rechnungsadresse) als eigenverantwortlicher Auftragsverarbeiter gemäß Art. 28 DSGVO. Die Datenschutzrichtlinie von Stripe ist einsehbar unter:{" "}
+              <a href="https://stripe.com/de/privacy" target="_blank" rel="noopener" className="transition-opacity hover:opacity-70" style={{ color: "#00c6ff" }}>
+                stripe.com/de/privacy
               </a>
             </p>
           </div>
@@ -77,8 +132,27 @@ export default function ImpressumPage() {
               Die Inhalte unserer Seiten wurden mit größter Sorgfalt erstellt. Für die Richtigkeit, Vollständigkeit und Aktualität der Inhalte können wir jedoch keine Gewähr übernehmen.
             </p>
             <p>
+              <strong style={{ color: "#e6edf3" }}>Haftung für Berechnungstools:</strong>{" "}
+              VoltOffice stellt Berechnungshilfen (z. B. VDE-Rechner) ausschließlich zur Orientierung bereit. Diese ersetzen keine Fachplanung durch eine zugelassene Elektrofachkraft. ElektroGenius übernimmt keinerlei Haftung für Schäden, die aus der Nutzung dieser Tools entstehen.
+            </p>
+            <p>
               <strong style={{ color: "#e6edf3" }}>Haftung für Links:</strong>{" "}
               Unser Angebot enthält Links zu externen Webseiten Dritter, auf deren Inhalte wir keinen Einfluss haben. Für die Inhalte der verlinkten Seiten ist stets der jeweilige Anbieter oder Betreiber der Seiten verantwortlich.
+            </p>
+          </div>
+        </section>
+
+        <section className="mb-8">
+          <h2 className="text-base font-semibold mb-3" style={{ color: "#00c6ff" }}>Streitschlichtung</h2>
+          <div className="rounded-xl p-5 text-sm leading-relaxed" style={{ background: "#112240", border: "1px solid #1e3a5f", color: "#c8dff0" }}>
+            <p>
+              Die Europäische Kommission stellt eine Plattform zur Online-Streitbeilegung (OS) bereit:{" "}
+              <a href="https://ec.europa.eu/consumers/odr/" target="_blank" rel="noopener" className="transition-opacity hover:opacity-70" style={{ color: "#00c6ff" }}>
+                https://ec.europa.eu/consumers/odr/
+              </a>
+            </p>
+            <p className="mt-2">
+              Wir sind nicht bereit oder verpflichtet, an Streitbeilegungsverfahren vor einer Verbraucherschlichtungsstelle teilzunehmen.
             </p>
           </div>
         </section>
