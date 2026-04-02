@@ -18,8 +18,8 @@ export const POST = withAuth(async (req, userId) => {
 
     if (!userDoc?.stripeCustomerId) {
       return NextResponse.json(
-        { error: "Kein Stripe-Konto gefunden. Bitte zuerst ein Abo abschließen." },
-        { status: 404 }
+        { error: "Kein aktives Zahlungskonto gefunden. Bitte schließe zuerst ein Abonnement ab oder kontaktiere den Support." },
+        { status: 400 }
       );
     }
 

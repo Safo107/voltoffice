@@ -18,6 +18,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Stripe nicht konfiguriert" }, { status: 503 });
   }
 
+  // Frühe Validierung: alle Preis-IDs prüfen bevor wir anfangen
+  const missingEnvVars: string[] = [];
+  if (!process.env.STRIPE_PRICE_ID_PRO) missingEnvVars.push("STRIPE_PRICE_ID_PRO");
+  if (!process.env.STRIPE_PRICE_ID_BUSINESS) missingEnvVars.push("STRIPE_PRICE_ID_BUSINESS");
+  if (missingEnvVars.length > 0) {
+    console.error("[checkout] Fehlende Stripe Preis-IDs:", missingEnvVars.join(", "), "— bitte in Vercel Environment Variables setzen.");
+    return NextResponse.json(
+      { error: "Eine oder mehrere Stripe-Preis-IDs sind nicht konfiguriert. Bitte prüfe die Environment Variables auf Vercel." },
+      { status: 400 }
+    );
+  }
+
   try {
     const { uid, email, plan = "pro" } = await req.json() as { uid: string; email: string; plan?: Plan };
 
@@ -27,7 +39,11 @@ export async function POST(req: NextRequest) {
 
     const priceId = getPriceId(plan);
     if (!priceId) {
-      return NextResponse.json({ error: `Kein Stripe-Preis für Plan "${plan}" konfiguriert` }, { status: 503 });
+      console.error(`[checkout] Kein Preis für Plan "${plan}" — getPriceId hat leeren String zurückgegeben.`);
+      return NextResponse.json(
+        { error: "Eine oder mehrere Stripe-Preis-IDs sind nicht konfiguriert. Bitte prüfe die Environment Variables auf Vercel." },
+        { status: 400 }
+      );
     }
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://voltoffice.elektrogenius.de";
@@ -66,7 +82,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ url: session.url });
   } catch (err: unknown) {
-    console.error("Checkout Fehler:", err);
+    console.error("[checkout] Unerwarteter Fehler:", err instanceof Error ? err.stack : err);
     return NextResponse.json({ error: "Checkout konnte nicht erstellt werden" }, { status: 500 });
   }
 }

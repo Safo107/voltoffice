@@ -829,7 +829,7 @@ export default function EinstellungenPage() {
                         </p>
                       )}
                     </div>
-                    {(tier === "pro" || tier === "business") && (
+                    {(tier === "pro" || tier === "business" || isTrial) && (
                       <div className="flex flex-col items-end gap-2 shrink-0">
                         <button
                           onClick={openPortal}
@@ -853,7 +853,7 @@ export default function EinstellungenPage() {
               </div>
 
               {/* Portal Info (Pro-User) */}
-              {!loadingPro && (tier === "pro" || tier === "business") && (
+              {!loadingPro && (tier === "pro" || tier === "business" || isTrial) && (
                 <div className="rounded-xl p-4" style={{ background: "#0d1b2e", border: "1px solid #1e3a5f" }}>
                   <p className="text-xs font-semibold mb-2" style={{ color: "#8b9ab5" }}>Im Kundenportal kannst du:</p>
                   <div className="grid grid-cols-2 gap-y-1.5">
