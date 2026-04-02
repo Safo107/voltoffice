@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Modal from "@/components/ui/Modal";
 import { usePro } from "@/context/ProContext";
 import {
   Clock, Plus, Play, Square, Calendar, Briefcase, Loader, Trash2,
-  Lock, Zap, Receipt, User, Check,
+  Lock, Zap, Receipt, User, Check, ChevronDown,
 } from "lucide-react";
 
 interface TimeEntry {
@@ -36,6 +36,8 @@ const EMPTY_FORM: Omit<TimeEntry, "_id"> = {
 };
 
 const TIMER_LS_KEY = "vo_timer_v1";
+const LAST_PROJEKT_KEY = "vo_last_projekt_id";
+const LAST_MA_KEY = "vo_last_ma_id";
 
 interface StoredTimer {
   startedAt: number;
@@ -81,6 +83,21 @@ export default function ZeiterfassungPage() {
   const [manualModalOpen, setManualModalOpen] = useState(false);
   const [manualForm, setManualForm] = useState<Omit<TimeEntry, "_id">>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+
+  // Custom dropdown state – timer card
+  const [timerProjektOpen, setTimerProjektOpen] = useState(false);
+  const [timerProjektSearch, setTimerProjektSearch] = useState("");
+  const [timerMaOpen, setTimerMaOpen] = useState(false);
+  const [timerMaSearch, setTimerMaSearch] = useState("");
+
+  // Custom dropdown state – manual modal
+  const [manualProjektOpen, setManualProjektOpen] = useState(false);
+  const [manualProjektSearch, setManualProjektSearch] = useState("");
+  const [manualMaOpen, setManualMaOpen] = useState(false);
+  const [manualMaSearch, setManualMaSearch] = useState("");
+
+  // Ref for autofocus on Stunden in manual modal
+  const hoursManualRef = useRef<HTMLInputElement>(null);
 
   // Invoice from entries
   const [selectedEntries, setSelectedEntries] = useState<Set<string>>(new Set());
@@ -134,7 +151,19 @@ export default function ZeiterfassungPage() {
     try {
       const res = await fetch("/api/projekte");
       const data = await res.json();
-      setProjekte(Array.isArray(data) ? data : []);
+      const list: Projekt[] = Array.isArray(data) ? data : [];
+      setProjekte(list);
+      // Restore last projekt (only if timer not running)
+      try {
+        const lastId = localStorage.getItem(LAST_PROJEKT_KEY);
+        if (lastId) {
+          const found = list.find((p) => p._id === lastId);
+          if (found) {
+            setTimerProjekt((prev) => prev || found.title);
+            setTimerProjektId((prev) => prev || found._id);
+          }
+        }
+      } catch { /* */ }
     } catch { /* */ }
   };
 
@@ -142,14 +171,34 @@ export default function ZeiterfassungPage() {
     try {
       const res = await fetch("/api/mitarbeiter");
       const data = await res.json();
-      setMitarbeiterListe(Array.isArray(data) ? data.filter((m: MitarbeiterEintrag) => m.aktiv) : []);
+      const list: MitarbeiterEintrag[] = Array.isArray(data) ? data.filter((m: MitarbeiterEintrag) => m.aktiv) : [];
+      setMitarbeiterListe(list);
+      // Restore last MA
+      try {
+        const lastId = localStorage.getItem(LAST_MA_KEY);
+        if (lastId) {
+          const found = list.find((m) => m._id === lastId);
+          if (found) {
+            setTimerMitarbeiter((prev) => prev || found.name);
+            setTimerMitarbeiterId((prev) => prev || found._id);
+            setTimerMitarbeiterRolle((prev) => prev || found.rolle);
+            setTimerStundensatz((prev) => prev !== 65 ? prev : found.stundensatz);
+          }
+        }
+      } catch { /* */ }
     } catch { /* */ }
   };
 
-  const selectMitarbeiter = (name: string, setter: (f: Omit<TimeEntry, "_id">) => void, form: Omit<TimeEntry, "_id">) => {
-    const found = mitarbeiterListe.find((m) => m.name === name);
-    setter({ ...form, mitarbeiter: name, mitarbeiterId: found?._id || "", mitarbeiterRolle: found?.rolle || "", stundensatz: found?.stundensatz ?? form.stundensatz });
-  };
+  const selectMitarbeiter = useCallback((m: MitarbeiterEintrag, setter: (f: Omit<TimeEntry, "_id">) => void, form: Omit<TimeEntry, "_id">) => {
+    try { localStorage.setItem(LAST_MA_KEY, m._id); } catch { /* */ }
+    setter({ ...form, mitarbeiter: m.name, mitarbeiterId: m._id, mitarbeiterRolle: m.rolle, stundensatz: m.stundensatz });
+  }, []);
+
+  const selectProjekt = useCallback((p: Projekt, setter: (n: string) => void, idSetter: (id: string) => void) => {
+    try { localStorage.setItem(LAST_PROJEKT_KEY, p._id); } catch { /* */ }
+    setter(p.title);
+    idSetter(p._id);
+  }, []);
 
   const startTimer = () => {
     const stored: StoredTimer = {
@@ -351,57 +400,89 @@ export default function ZeiterfassungPage() {
           {/* Pre-start fields */}
           {!timerRunning && (
             <div className="space-y-2.5">
+              {/* Projekt */}
               <div>
                 <label className="block text-xs font-medium mb-1" style={{ color: "#8b9ab5" }}>Projekt</label>
-                <input
-                  list="projekte-dl"
-                  value={timerProjekt}
-                  onChange={(e) => {
-                    setTimerProjekt(e.target.value);
-                    const found = projekte.find((p) => p.title === e.target.value);
-                    setTimerProjektId(found?._id || "");
-                  }}
-                  placeholder="Projekt wählen oder eingeben…"
-                  className="w-full px-3 py-2 rounded-xl text-sm outline-none"
-                  style={inputSty}
-                  onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
-                  onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
-                />
-                <datalist id="projekte-dl">
-                  {projekte.map((p) => <option key={p._id} value={p.title} />)}
-                </datalist>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-xs font-medium mb-1" style={{ color: "#8b9ab5" }}>Tätigkeit</label>
-                  <select value={timerTaetigkeit} onChange={(e) => setTimerTaetigkeit(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl text-sm outline-none" style={inputSty}>
-                    {TAETIGKEITEN.map((t) => <option key={t} value={t}>{t}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1" style={{ color: "#8b9ab5" }}>
-                    Mitarbeiter{timerMitarbeiterRolle && <span className="ml-1 font-normal" style={{ color: "#4a6fa5" }}>({timerMitarbeiterRolle})</span>}
-                  </label>
+                <div className="relative">
                   <input
-                    list="ma-dl-timer"
-                    value={timerMitarbeiter}
-                    onChange={(e) => {
-                      const found = mitarbeiterListe.find((m) => m.name === e.target.value);
-                      setTimerMitarbeiter(e.target.value);
-                      setTimerMitarbeiterId(found?._id || "");
-                      setTimerMitarbeiterRolle(found?.rolle || "");
-                      if (found) setTimerStundensatz(found.stundensatz);
-                    }}
-                    placeholder="Name…"
-                    className="w-full px-3 py-2 rounded-xl text-sm outline-none" style={inputSty}
-                    onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
-                    onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
+                    value={timerProjektOpen ? timerProjektSearch : timerProjekt}
+                    onChange={(e) => { setTimerProjektSearch(e.target.value); setTimerProjektOpen(true); }}
+                    onFocus={() => { setTimerProjektSearch(""); setTimerProjektOpen(true); }}
+                    onBlur={() => setTimeout(() => setTimerProjektOpen(false), 160)}
+                    placeholder="Projekt wählen…"
+                    className="w-full px-3 py-2 rounded-xl text-sm outline-none pr-8"
+                    style={inputSty}
                   />
-                  <datalist id="ma-dl-timer">
-                    {mitarbeiterListe.map((m) => <option key={m._id} value={m.name} label={`${m.rolle} · ${m.stundensatz}€/h`} />)}
-                  </datalist>
+                  <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "#4a6fa5" }} />
+                  {timerProjektOpen && (
+                    <div className="absolute z-50 w-full top-full mt-1 rounded-xl overflow-hidden"
+                      style={{ background: "#1a2f50", border: "1px solid #1e3a5f", boxShadow: "0 8px 24px rgba(0,0,0,0.5)", maxHeight: 180, overflowY: "auto" }}>
+                      {projekte.filter((p) => !timerProjektSearch || p.title.toLowerCase().includes(timerProjektSearch.toLowerCase())).length === 0
+                        ? <div className="px-3 py-2.5 text-xs" style={{ color: "#4a6fa5" }}>Keine Projekte gefunden</div>
+                        : projekte.filter((p) => !timerProjektSearch || p.title.toLowerCase().includes(timerProjektSearch.toLowerCase())).map((p) => (
+                          <button key={p._id} type="button"
+                            onMouseDown={() => { selectProjekt(p, setTimerProjekt, setTimerProjektId); setTimerProjektSearch(""); setTimerProjektOpen(false); }}
+                            className="flex flex-col w-full px-3 py-2 text-left transition-all"
+                            style={{ borderBottom: "1px solid #1e3a5f22" }}
+                            onMouseEnter={(e) => { e.currentTarget.style.background = "#00c6ff0f"; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
+                            <span className="text-sm" style={{ color: "#e6edf3" }}>{p.title}</span>
+                            <span className="text-xs" style={{ color: "#4a6fa5" }}>{p.customerName}</span>
+                          </button>
+                        ))}
+                    </div>
+                  )}
                 </div>
+              </div>
+              {/* Mitarbeiter */}
+              <div>
+                <label className="block text-xs font-medium mb-1" style={{ color: "#8b9ab5" }}>Mitarbeiter</label>
+                <div className="relative">
+                  <input
+                    value={timerMaOpen ? timerMaSearch : (timerMitarbeiter ? `${timerMitarbeiter}${timerMitarbeiterRolle ? ` (${timerMitarbeiterRolle})` : ""}` : "")}
+                    onChange={(e) => { setTimerMaSearch(e.target.value); setTimerMaOpen(true); }}
+                    onFocus={() => { setTimerMaSearch(""); setTimerMaOpen(true); }}
+                    onBlur={() => setTimeout(() => setTimerMaOpen(false), 160)}
+                    placeholder="Mitarbeiter wählen…"
+                    className="w-full px-3 py-2 rounded-xl text-sm outline-none pr-8"
+                    style={inputSty}
+                  />
+                  <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "#4a6fa5" }} />
+                  {timerMaOpen && (
+                    <div className="absolute z-50 w-full top-full mt-1 rounded-xl overflow-hidden"
+                      style={{ background: "#1a2f50", border: "1px solid #1e3a5f", boxShadow: "0 8px 24px rgba(0,0,0,0.5)", maxHeight: 200, overflowY: "auto" }}>
+                      {mitarbeiterListe.filter((m) => !timerMaSearch || m.name.toLowerCase().includes(timerMaSearch.toLowerCase())).length === 0
+                        ? <div className="px-3 py-2.5 text-xs" style={{ color: "#4a6fa5" }}>Keine Mitarbeiter gefunden</div>
+                        : mitarbeiterListe.filter((m) => !timerMaSearch || m.name.toLowerCase().includes(timerMaSearch.toLowerCase())).map((m) => (
+                          <button key={m._id} type="button"
+                            onMouseDown={() => {
+                              setTimerMitarbeiter(m.name); setTimerMitarbeiterId(m._id);
+                              setTimerMitarbeiterRolle(m.rolle); setTimerStundensatz(m.stundensatz);
+                              try { localStorage.setItem(LAST_MA_KEY, m._id); } catch { /* */ }
+                              setTimerMaSearch(""); setTimerMaOpen(false);
+                            }}
+                            className="flex items-center justify-between w-full px-3 py-2.5 text-left transition-all"
+                            style={{ borderBottom: "1px solid #1e3a5f22" }}
+                            onMouseEnter={(e) => { e.currentTarget.style.background = "#00c6ff0f"; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
+                            <div>
+                              <span className="text-sm font-medium" style={{ color: "#e6edf3" }}>{m.name}</span>
+                              <span className="text-xs ml-1.5" style={{ color: "#4a6fa5" }}>{m.rolle}</span>
+                            </div>
+                            <span className="text-xs font-semibold shrink-0" style={{ color: "#22c55e" }}>{m.stundensatz}€/h</span>
+                          </button>
+                        ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+              {/* Tätigkeit */}
+              <div>
+                <label className="block text-xs font-medium mb-1" style={{ color: "#8b9ab5" }}>Tätigkeit</label>
+                <select value={timerTaetigkeit} onChange={(e) => setTimerTaetigkeit(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl text-sm outline-none" style={inputSty}>
+                  {TAETIGKEITEN.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
               </div>
             </div>
           )}
@@ -486,7 +567,21 @@ export default function ZeiterfassungPage() {
               </button>
             )}
             <button
-              onClick={() => { setManualForm({ ...EMPTY_FORM, date: new Date().toISOString().split("T")[0] }); setManualModalOpen(true); }}
+              onClick={() => {
+                setManualForm({
+                  ...EMPTY_FORM,
+                  date: new Date().toISOString().split("T")[0],
+                  projektId: timerProjektId,
+                  projektName: timerProjekt,
+                  mitarbeiter: timerMitarbeiter,
+                  mitarbeiterId: timerMitarbeiterId,
+                  mitarbeiterRolle: timerMitarbeiterRolle,
+                  stundensatz: timerStundensatz,
+                });
+                setManualProjektSearch(""); setManualMaSearch("");
+                setManualModalOpen(true);
+                setTimeout(() => hoursManualRef.current?.focus(), 80);
+              }}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold"
               style={{ background: "linear-gradient(135deg, #00c6ff, #0099cc)", color: "#0d1b2e" }}>
               <Plus size={13} />Nachtragen
@@ -645,102 +740,146 @@ export default function ZeiterfassungPage() {
       {/* === Modal: Manueller Eintrag === */}
       <Modal open={manualModalOpen} onClose={() => setManualModalOpen(false)} title="Zeit nachtragen">
         <form onSubmit={(e) => { e.preventDefault(); handleSaveEntry(manualForm, () => setManualModalOpen(false)); }} className="space-y-4">
+
+          {/* 1. Projekt */}
           <div>
-            <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Projekt *</label>
-            <input list="projekte-dl-manual" required
-              value={manualForm.projektName}
-              onChange={(e) => {
-                const found = projekte.find((p) => p.title === e.target.value);
-                setManualForm({ ...manualForm, projektName: e.target.value, projektId: found?._id || "" });
-              }}
-              placeholder="Projekt wählen oder eingeben…"
-              className="w-full px-3 py-2.5 rounded-xl text-sm outline-none" style={inputSty}
-              onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
+            <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Projekt</label>
+            <div className="relative">
+              <input
+                value={manualProjektOpen ? manualProjektSearch : manualForm.projektName}
+                onChange={(e) => { setManualProjektSearch(e.target.value); setManualProjektOpen(true); }}
+                onFocus={() => { setManualProjektSearch(""); setManualProjektOpen(true); }}
+                onBlur={() => setTimeout(() => setManualProjektOpen(false), 160)}
+                placeholder="Projekt wählen…"
+                className="w-full px-3 py-3 rounded-xl text-sm outline-none pr-8"
+                style={inputSty}
+              />
+              <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "#4a6fa5" }} />
+              {manualProjektOpen && (
+                <div className="absolute z-50 w-full top-full mt-1 rounded-xl overflow-hidden"
+                  style={{ background: "#1a2f50", border: "1px solid #1e3a5f", boxShadow: "0 8px 24px rgba(0,0,0,0.5)", maxHeight: 180, overflowY: "auto" }}>
+                  {projekte.filter((p) => !manualProjektSearch || p.title.toLowerCase().includes(manualProjektSearch.toLowerCase())).length === 0
+                    ? <div className="px-3 py-2.5 text-xs" style={{ color: "#4a6fa5" }}>Keine Projekte gefunden</div>
+                    : projekte.filter((p) => !manualProjektSearch || p.title.toLowerCase().includes(manualProjektSearch.toLowerCase())).map((p) => (
+                      <button key={p._id} type="button"
+                        onMouseDown={() => {
+                          selectProjekt(p,
+                            (t) => setManualForm((f) => ({ ...f, projektName: t })),
+                            (id) => setManualForm((f) => ({ ...f, projektId: id }))
+                          );
+                          setManualProjektSearch(""); setManualProjektOpen(false);
+                        }}
+                        className="flex flex-col w-full px-3 py-2.5 text-left transition-all"
+                        style={{ borderBottom: "1px solid #1e3a5f22" }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = "#00c6ff0f"; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
+                        <span className="text-sm" style={{ color: "#e6edf3" }}>{p.title}</span>
+                        <span className="text-xs" style={{ color: "#4a6fa5" }}>{p.customerName}</span>
+                      </button>
+                    ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 2. Mitarbeiter */}
+          <div>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Mitarbeiter</label>
+            <div className="relative">
+              <input
+                value={manualMaOpen ? manualMaSearch : (manualForm.mitarbeiter ? `${manualForm.mitarbeiter}${manualForm.mitarbeiterRolle ? ` (${manualForm.mitarbeiterRolle})` : ""}` : "")}
+                onChange={(e) => { setManualMaSearch(e.target.value); setManualMaOpen(true); }}
+                onFocus={() => { setManualMaSearch(""); setManualMaOpen(true); }}
+                onBlur={() => setTimeout(() => setManualMaOpen(false), 160)}
+                placeholder="Mitarbeiter wählen…"
+                className="w-full px-3 py-3 rounded-xl text-sm outline-none pr-8"
+                style={inputSty}
+              />
+              <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "#4a6fa5" }} />
+              {manualMaOpen && (
+                <div className="absolute z-50 w-full top-full mt-1 rounded-xl overflow-hidden"
+                  style={{ background: "#1a2f50", border: "1px solid #1e3a5f", boxShadow: "0 8px 24px rgba(0,0,0,0.5)", maxHeight: 200, overflowY: "auto" }}>
+                  {mitarbeiterListe.filter((m) => !manualMaSearch || m.name.toLowerCase().includes(manualMaSearch.toLowerCase())).length === 0
+                    ? <div className="px-3 py-2.5 text-xs" style={{ color: "#4a6fa5" }}>Keine Mitarbeiter gefunden</div>
+                    : mitarbeiterListe.filter((m) => !manualMaSearch || m.name.toLowerCase().includes(manualMaSearch.toLowerCase())).map((m) => (
+                      <button key={m._id} type="button"
+                        onMouseDown={() => { selectMitarbeiter(m, setManualForm, manualForm); setManualMaSearch(""); setManualMaOpen(false); }}
+                        className="flex items-center justify-between w-full px-3 py-2.5 text-left transition-all"
+                        style={{ borderBottom: "1px solid #1e3a5f22" }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = "#00c6ff0f"; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
+                        <div>
+                          <span className="text-sm font-medium" style={{ color: "#e6edf3" }}>{m.name}</span>
+                          <span className="text-xs ml-1.5" style={{ color: "#4a6fa5" }}>{m.rolle}</span>
+                        </div>
+                        <span className="text-xs font-semibold shrink-0" style={{ color: "#22c55e" }}>{m.stundensatz}€/h</span>
+                      </button>
+                    ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 3. Stunden – groß + zentral */}
+          <div>
+            <label className="block text-xs font-medium mb-1.5 text-center" style={{ color: "#8b9ab5" }}>Stunden *</label>
+            <input
+              ref={hoursManualRef}
+              type="number" min="0.5" max="24" step="0.5" required
+              value={manualForm.hours}
+              onChange={(e) => setManualForm({ ...manualForm, hours: Number(e.target.value) })}
+              className="w-full rounded-xl text-center font-bold outline-none"
+              style={{ ...inputSty, fontSize: 32, padding: "14px 16px", letterSpacing: 1 }}
+              onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; e.currentTarget.select(); }}
               onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
             />
-            <datalist id="projekte-dl-manual">
-              {projekte.map((p) => <option key={p._id} value={p.title} />)}
-            </datalist>
+            <p className="text-xs text-center mt-1" style={{ color: "#4a6fa5" }}>
+              {manualForm.stundensatz && manualForm.hours ? `${manualForm.hours}h × ${manualForm.stundensatz}€ = ${(manualForm.hours * (manualForm.stundensatz || 0)).toFixed(2)} €` : "Stunden eingeben"}
+            </p>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Tätigkeit</label>
-              <select value={manualForm.taetigkeit}
-                onChange={(e) => setManualForm({ ...manualForm, taetigkeit: e.target.value })}
-                className="w-full px-3 py-2.5 rounded-xl text-sm outline-none" style={inputSty}>
-                {TAETIGKEITEN.map((t) => <option key={t} value={t}>{t}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>
-                Mitarbeiter{manualForm.mitarbeiterRolle && <span className="ml-1 font-normal" style={{ color: "#4a6fa5" }}>({manualForm.mitarbeiterRolle})</span>}
-              </label>
-              <input
-                list="ma-dl-manual"
-                value={manualForm.mitarbeiter}
-                onChange={(e) => selectMitarbeiter(e.target.value, setManualForm, manualForm)}
-                placeholder="Name…"
-                className="w-full px-3 py-2.5 rounded-xl text-sm outline-none" style={inputSty}
-                onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
-                onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
-              />
-              <datalist id="ma-dl-manual">
-                {mitarbeiterListe.map((m) => <option key={m._id} value={m.name} label={`${m.rolle} · ${m.stundensatz}€/h`} />)}
-              </datalist>
-            </div>
-          </div>
+
+          {/* 4. Datum + Tätigkeit */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Datum *</label>
               <input type="date" required
                 value={manualForm.date}
                 onChange={(e) => setManualForm({ ...manualForm, date: e.target.value })}
-                className="w-full px-3 py-2.5 rounded-xl text-sm outline-none" style={inputSty}
+                className="w-full px-3 py-3 rounded-xl text-sm outline-none" style={inputSty}
                 onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
                 onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
               />
             </div>
             <div>
-              <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Stunden *</label>
-              <input type="number" min="0.5" max="24" step="0.5" required
-                value={manualForm.hours}
-                onChange={(e) => setManualForm({ ...manualForm, hours: Number(e.target.value) })}
-                className="w-full px-3 py-2.5 rounded-xl text-sm outline-none" style={inputSty}
-                onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
-                onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
-              />
+              <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Tätigkeit</label>
+              <select value={manualForm.taetigkeit}
+                onChange={(e) => setManualForm({ ...manualForm, taetigkeit: e.target.value })}
+                className="w-full px-3 py-3 rounded-xl text-sm outline-none" style={inputSty}>
+                {TAETIGKEITEN.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Stundensatz €</label>
-              <input type="number" min="1"
-                value={manualForm.stundensatz}
-                onChange={(e) => setManualForm({ ...manualForm, stundensatz: Number(e.target.value) })}
-                className="w-full px-3 py-2.5 rounded-xl text-sm outline-none" style={inputSty}
-                onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
-                onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Notiz</label>
-              <input value={manualForm.description || ""}
-                onChange={(e) => setManualForm({ ...manualForm, description: e.target.value })}
-                placeholder="optional…"
-                className="w-full px-3 py-2.5 rounded-xl text-sm outline-none" style={inputSty}
-                onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
-                onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
-              />
-            </div>
+
+          {/* 5. Notiz */}
+          <div>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Notiz (optional)</label>
+            <input value={manualForm.description || ""}
+              onChange={(e) => setManualForm({ ...manualForm, description: e.target.value })}
+              placeholder="z.B. Kabelverlegung EG"
+              className="w-full px-3 py-3 rounded-xl text-sm outline-none" style={inputSty}
+              onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
+            />
           </div>
+
           <div className="flex gap-3">
             <button type="button" onClick={() => setManualModalOpen(false)}
-              className="flex-1 py-2.5 rounded-xl text-sm font-semibold"
+              className="flex-1 py-3 rounded-xl text-sm font-semibold"
               style={{ background: "#0d1b2e", border: "1px solid #1e3a5f", color: "#8b9ab5" }}>
               Abbrechen
             </button>
             <button type="submit" disabled={saving}
-              className="flex-1 py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50"
+              className="flex-1 py-3 rounded-xl text-sm font-semibold disabled:opacity-50"
               style={{ background: "linear-gradient(135deg, #00c6ff, #0099cc)", color: "#0d1b2e" }}>
               {saving ? "Speichern…" : "Speichern"}
             </button>
