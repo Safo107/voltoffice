@@ -145,8 +145,8 @@ export default function Topbar({ title, subtitle }: TopbarProps) {
 
           {bellOpen && (
             <div
-              className="absolute right-0 top-11 rounded-xl py-2 z-50 w-80"
-              style={{ background: "#1a2f50", border: "1px solid #1e3a5f", boxShadow: "0 12px 32px rgba(0,0,0,0.5)" }}
+              className="absolute right-0 top-11 rounded-xl py-2 z-50"
+              style={{ background: "#1a2f50", border: "1px solid #1e3a5f", boxShadow: "0 12px 32px rgba(0,0,0,0.5)", width: "min(320px, calc(100vw - 24px))" }}
             >
               <div className="flex items-center justify-between px-4 py-2 mb-1" style={{ borderBottom: "1px solid #1e3a5f" }}>
                 <div className="flex items-center gap-2">

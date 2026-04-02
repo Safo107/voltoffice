@@ -98,7 +98,7 @@ export default function UpgradePage() {
       </div>
 
       {/* Pricing Grid */}
-      <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-3 gap-5">
+      <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-3 gap-5 pt-4 overflow-visible">
 
         {/* ── FREE ─────────────────────────────────────────────── */}
         <div className="rounded-2xl p-6 flex flex-col"
@@ -231,7 +231,7 @@ export default function UpgradePage() {
       )}
 
       {/* Trust footer */}
-      <div className="flex items-center gap-6 text-xs mt-8 mb-4" style={{ color: "#8b9ab5" }}>
+      <div className="flex flex-wrap items-center justify-center gap-4 md:gap-6 text-xs mt-8 mb-4" style={{ color: "#8b9ab5" }}>
         <span className="flex items-center gap-1"><Shield size={12} /> SSL-verschlüsselt</span>
         <span>Powered by Stripe</span>
         <span>Jederzeit kündbar</span>

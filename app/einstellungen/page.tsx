@@ -799,7 +799,7 @@ export default function EinstellungenPage() {
                     <span className="text-sm" style={{ color: "#8b9ab5" }}>Wird geladen…</span>
                   </div>
                 ) : (
-                  <div className="flex items-start justify-between gap-4">
+                  <div className="flex flex-wrap items-start justify-between gap-4">
                     <div>
                       <div className="flex items-center gap-2 mb-1">
                         {(tier === "pro" || tier === "business") && <Zap size={16} style={{ color: "#f5a623" }} />}
