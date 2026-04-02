@@ -44,7 +44,14 @@ const BUSINESS_FEATURES = [
 
 export default function UpgradePage() {
   const { user } = useAuth();
-  const { tier, plan: currentPlan, trialDaysLeft } = usePro();
+  const { tier, plan: currentPlan, trialDaysLeft, trialEndsAt } = usePro();
+
+  const trialEndBerlin = trialEndsAt
+    ? new Date(trialEndsAt).toLocaleDateString("de-DE", {
+        timeZone: "Europe/Berlin",
+        day: "2-digit", month: "2-digit", year: "numeric",
+      })
+    : null;
   const router = useRouter();
   const [loading, setLoading] = useState<Plan | null>(null);
   const [error, setError] = useState("");
@@ -93,6 +100,9 @@ export default function UpgradePage() {
             style={{ background: "rgba(0,198,255,0.1)", border: "1px solid rgba(0,198,255,0.3)", color: "#00c6ff" }}>
             <Clock size={14} />
             Testphase läuft — noch {trialDaysLeft} {trialDaysLeft === 1 ? "Tag" : "Tage"} kostenlos
+            {trialEndBerlin && (
+              <span style={{ color: "#8b9ab5", fontSize: "0.75rem" }}>(bis {trialEndBerlin})</span>
+            )}
           </div>
         )}
       </div>

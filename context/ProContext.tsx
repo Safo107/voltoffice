@@ -7,6 +7,7 @@ interface ProContextType {
   isPro: boolean;
   isTrial: boolean;
   trialDaysLeft: number;
+  trialEndsAt: string | null;
   tier: "trial" | "free" | "pro" | "business";
   plan: "free" | "pro" | "business";
   loadingPro: boolean;
@@ -20,6 +21,7 @@ const ProContext = createContext<ProContextType>({
   isPro: false,
   isTrial: false,
   trialDaysLeft: 0,
+  trialEndsAt: null,
   tier: "free",
   plan: "free",
   loadingPro: true,
@@ -37,6 +39,7 @@ export function ProProvider({ children }: { children: React.ReactNode }) {
   const [tier, setTier] = useState<"trial" | "free" | "pro" | "business">("free");
   const [plan, setPlan] = useState<"free" | "pro" | "business">("free");
   const [loadingPro, setLoadingPro] = useState(true);
+  const [trialEndsAt, setTrialEndsAt] = useState<string | null>(null);
   const [hasStripeCustomer, setHasStripeCustomer] = useState(false);
   const [lastPaymentFailed, setLastPaymentFailed] = useState<string | null>(null);
   const [proSince, setProSince] = useState<string | null>(null);
@@ -50,6 +53,7 @@ export function ProProvider({ children }: { children: React.ReactNode }) {
       setTrialDaysLeft(data.trialDaysLeft || 0);
       setTier(data.tier || "free");
       setPlan(data.plan || "free");
+      setTrialEndsAt(data.trialEndsAt || null);
       setHasStripeCustomer(data.hasStripeCustomer === true);
       setLastPaymentFailed(data.lastPaymentFailed || null);
       setProSince(data.proSince || null);
@@ -57,6 +61,7 @@ export function ProProvider({ children }: { children: React.ReactNode }) {
       setIsPro(false);
       setIsTrial(false);
       setTrialDaysLeft(0);
+      setTrialEndsAt(null);
       setTier("free");
       setPlan("free");
       setHasStripeCustomer(false);
@@ -78,6 +83,7 @@ export function ProProvider({ children }: { children: React.ReactNode }) {
       setIsPro(false);
       setIsTrial(false);
       setTrialDaysLeft(0);
+      setTrialEndsAt(null);
       setTier("free");
       setPlan("free");
       setLoadingPro(false);
@@ -85,7 +91,7 @@ export function ProProvider({ children }: { children: React.ReactNode }) {
   }, [user]);
 
   return (
-    <ProContext.Provider value={{ isPro, isTrial, trialDaysLeft, tier, plan, loadingPro, hasStripeCustomer, lastPaymentFailed, proSince, refreshPro }}>
+    <ProContext.Provider value={{ isPro, isTrial, trialDaysLeft, trialEndsAt, tier, plan, loadingPro, hasStripeCustomer, lastPaymentFailed, proSince, refreshPro }}>
       {children}
     </ProContext.Provider>
   );
