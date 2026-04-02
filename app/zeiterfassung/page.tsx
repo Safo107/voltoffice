@@ -5,48 +5,111 @@ import { useRouter } from "next/navigation";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Modal from "@/components/ui/Modal";
 import { usePro } from "@/context/ProContext";
-import { Clock, Plus, Play, Square, Calendar, Briefcase, Loader, Trash2, Lock, Zap } from "lucide-react";
+import {
+  Clock, Plus, Play, Square, Calendar, Briefcase, Loader, Trash2,
+  Lock, Zap, Receipt, User, Check,
+} from "lucide-react";
 
 interface TimeEntry {
   _id?: string;
-  projectName: string;
+  projektId?: string;
+  projektName: string;
+  taetigkeit: string;
+  mitarbeiter: string;
   date: string;
   hours: number;
-  description: string;
+  description?: string;
+  stundensatz?: number;
 }
 
-const EMPTY_FORM = { projectName: "", date: "", hours: 1, description: "" };
+interface Projekt { _id: string; title: string; customerName: string; }
+
+const TAETIGKEITEN = ["Installation", "Wartung", "Planung", "Messung", "Dokumentation", "Sonstiges"];
+
+const EMPTY_FORM: Omit<TimeEntry, "_id"> = {
+  projektId: "", projektName: "", taetigkeit: "Installation",
+  mitarbeiter: "", date: new Date().toISOString().split("T")[0],
+  hours: 1, description: "", stundensatz: 65,
+};
+
+const TIMER_LS_KEY = "vo_timer_v1";
+
+interface StoredTimer {
+  startedAt: number;
+  projektName: string;
+  projektId: string;
+  taetigkeit: string;
+  mitarbeiter: string;
+}
+
+function getKW(date: Date): number {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const day = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+}
 
 export default function ZeiterfassungPage() {
   const { isPro, loadingPro } = usePro();
   const router = useRouter();
   const [entries, setEntries] = useState<TimeEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [form, setForm] = useState(EMPTY_FORM);
-  const [saving, setSaving] = useState(false);
+  const [projekte, setProjekte] = useState<Projekt[]>([]);
 
   // Timer
-  const [isRunning, setIsRunning] = useState(false);
-  const [seconds, setSeconds] = useState(0);
+  const [timerRunning, setTimerRunning] = useState(false);
+  const [timerSeconds, setTimerSeconds] = useState(0);
+  const [timerProjekt, setTimerProjekt] = useState("");
+  const [timerProjektId, setTimerProjektId] = useState("");
+  const [timerTaetigkeit, setTimerTaetigkeit] = useState("Installation");
+  const [timerMitarbeiter, setTimerMitarbeiter] = useState("");
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  useEffect(() => { fetchEntries(); }, []);
+  // Save-after-stop modal
+  const [saveModalOpen, setSaveModalOpen] = useState(false);
+  const [saveForm, setSaveForm] = useState<Omit<TimeEntry, "_id">>(EMPTY_FORM);
+
+  // Manual entry modal
+  const [manualModalOpen, setManualModalOpen] = useState(false);
+  const [manualForm, setManualForm] = useState<Omit<TimeEntry, "_id">>(EMPTY_FORM);
+  const [saving, setSaving] = useState(false);
+
+  // Invoice from entries
+  const [selectedEntries, setSelectedEntries] = useState<Set<string>>(new Set());
+  const [invoiceModalOpen, setInvoiceModalOpen] = useState(false);
+  const [invoiceStundensatz, setInvoiceStundensatz] = useState(65);
+  const [invoiceKunde, setInvoiceKunde] = useState("");
+  const [invoiceSaving, setInvoiceSaving] = useState(false);
 
   useEffect(() => {
-    if (isRunning) {
-      intervalRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
+    fetchEntries();
+    fetchProjekte();
+    restoreTimer();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (timerRunning) {
+      intervalRef.current = setInterval(() => setTimerSeconds((s) => s + 1), 1000);
     } else {
       if (intervalRef.current) clearInterval(intervalRef.current);
     }
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [isRunning]);
+  }, [timerRunning]);
 
-  const formatTime = (s: number) => {
-    const h = Math.floor(s / 3600).toString().padStart(2, "0");
-    const m = Math.floor((s % 3600) / 60).toString().padStart(2, "0");
-    const sec = (s % 60).toString().padStart(2, "0");
-    return `${h}:${m}:${sec}`;
+  const restoreTimer = () => {
+    try {
+      const stored = localStorage.getItem(TIMER_LS_KEY);
+      if (!stored) return;
+      const data: StoredTimer = JSON.parse(stored);
+      const elapsed = Math.floor((Date.now() - data.startedAt) / 1000);
+      setTimerProjekt(data.projektName);
+      setTimerProjektId(data.projektId);
+      setTimerTaetigkeit(data.taetigkeit);
+      setTimerMitarbeiter(data.mitarbeiter);
+      setTimerSeconds(elapsed);
+      setTimerRunning(true);
+    } catch { /* */ }
   };
 
   const fetchEntries = async () => {
@@ -55,75 +118,153 @@ export default function ZeiterfassungPage() {
       const res = await fetch("/api/zeiterfassung");
       const data = await res.json();
       setEntries(Array.isArray(data) ? data : []);
-    } catch {
-      setEntries([]);
-    } finally {
-      setLoading(false);
-    }
+    } catch { setEntries([]); }
+    finally { setLoading(false); }
   };
 
-  const openNew = () => {
-    setForm({ ...EMPTY_FORM, date: new Date().toISOString().split("T")[0] });
-    setModalOpen(true);
+  const fetchProjekte = async () => {
+    try {
+      const res = await fetch("/api/projekte");
+      const data = await res.json();
+      setProjekte(Array.isArray(data) ? data : []);
+    } catch { /* */ }
   };
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const startTimer = () => {
+    const stored: StoredTimer = {
+      startedAt: Date.now() - timerSeconds * 1000,
+      projektName: timerProjekt,
+      projektId: timerProjektId,
+      taetigkeit: timerTaetigkeit,
+      mitarbeiter: timerMitarbeiter,
+    };
+    localStorage.setItem(TIMER_LS_KEY, JSON.stringify(stored));
+    setTimerRunning(true);
+  };
+
+  const stopTimer = () => {
+    setTimerRunning(false);
+    localStorage.removeItem(TIMER_LS_KEY);
+    const hours = Math.max(0.5, Math.round((timerSeconds / 3600) * 10) / 10);
+    setSaveForm({
+      projektId: timerProjektId,
+      projektName: timerProjekt,
+      taetigkeit: timerTaetigkeit,
+      mitarbeiter: timerMitarbeiter,
+      date: new Date().toISOString().split("T")[0],
+      hours,
+      description: "",
+      stundensatz: 65,
+    });
+    setTimerSeconds(0);
+    setSaveModalOpen(true);
+  };
+
+  const handleSaveEntry = async (form: Omit<TimeEntry, "_id">, onDone: () => void) => {
     setSaving(true);
     try {
-      await fetch("/api/zeiterfassung", {
+      const res = await fetch("/api/zeiterfassung", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
-      await fetchEntries();
-      setModalOpen(false);
-    } catch {
-      //
-    } finally {
-      setSaving(false);
-    }
+      if (res.ok) { await fetchEntries(); onDone(); }
+    } catch { /* */ }
+    finally { setSaving(false); }
   };
 
   const handleDelete = async (entry: TimeEntry) => {
-    if (!confirm(`Eintrag "${entry.description || entry.projectName}" löschen?`)) return;
+    if (!confirm("Eintrag löschen?")) return;
     try {
       await fetch(`/api/zeiterfassung/${entry._id}`, { method: "DELETE" });
       await fetchEntries();
-    } catch {
-      //
-    }
+    } catch { /* */ }
   };
 
-  const totalHours = entries.reduce((sum, e) => sum + (e.hours || 0), 0);
+  const toggleSelect = (id: string) => {
+    setSelectedEntries((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
 
-  // Current week hours
+  const selectedData = entries.filter((e) => e._id && selectedEntries.has(e._id));
+
+  const openInvoiceModal = () => {
+    const proj = projekte.find((p) => p._id === selectedData[0]?.projektId);
+    setInvoiceKunde(proj?.customerName || selectedData[0]?.projektName || "");
+    setInvoiceStundensatz(selectedData[0]?.stundensatz || 65);
+    setInvoiceModalOpen(true);
+  };
+
+  const createInvoice = async () => {
+    setInvoiceSaving(true);
+    try {
+      const items = selectedData.map((e) => ({
+        beschreibung: `${e.taetigkeit}${e.projektName ? ` – ${e.projektName}` : ""}${e.mitarbeiter ? ` (${e.mitarbeiter})` : ""}`,
+        menge: e.hours,
+        einheit: "Std.",
+        einzelpreis: invoiceStundensatz,
+        gesamt: e.hours * invoiceStundensatz,
+        typ: "lohn" as const,
+        mitarbeiter: 1,
+      }));
+      const total = items.reduce((s, i) => s + i.gesamt, 0);
+      const res = await fetch("/api/rechnungen", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customerName: invoiceKunde || "—",
+          abrechnungsart: "regie",
+          betreff: selectedData[0]?.projektName ? `Arbeitszeiten – ${selectedData[0].projektName}` : "Arbeitszeiten",
+          items,
+          total,
+          status: "offen",
+        }),
+      });
+      if (res.ok) {
+        setInvoiceModalOpen(false);
+        setSelectedEntries(new Set());
+        router.push("/rechnungen");
+      }
+    } catch { /* */ }
+    finally { setInvoiceSaving(false); }
+  };
+
+  const formatTime = (s: number) => {
+    const h = Math.floor(s / 3600).toString().padStart(2, "0");
+    const m = Math.floor((s % 3600) / 60).toString().padStart(2, "0");
+    const sec = (s % 60).toString().padStart(2, "0");
+    return `${h}:${m}:${sec}`;
+  };
+
+  // Weekly stats
   const now = new Date();
+  const dayOfWeek = now.getDay();
   const weekStart = new Date(now);
-  weekStart.setDate(now.getDate() - now.getDay() + 1);
+  weekStart.setDate(now.getDate() - ((dayOfWeek + 6) % 7));
   weekStart.setHours(0, 0, 0, 0);
-  const weekHours = entries
-    .filter((e) => new Date(e.date) >= weekStart)
-    .reduce((sum, e) => sum + (e.hours || 0), 0);
-
-  // Day bars for current week
-  const dayNames = ["Mo", "Di", "Mi", "Do", "Fr"];
+  const dayNames = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
   const dayHours = dayNames.map((_, i) => {
     const d = new Date(weekStart);
     d.setDate(weekStart.getDate() + i);
     const ds = d.toISOString().split("T")[0];
-    return entries.filter((e) => e.date === ds).reduce((sum, e) => sum + (e.hours || 0), 0);
+    return entries.filter((e) => e.date === ds).reduce((s, e) => s + (e.hours || 0), 0);
   });
   const maxDay = Math.max(...dayHours, 1);
+  const weekHours = dayHours.reduce((s, h) => s + h, 0);
+  const totalHours = entries.reduce((s, e) => s + (e.hours || 0), 0);
+  const todayIdx = (dayOfWeek + 6) % 7;
+
+  const inputSty = { background: "#0d1b2e", border: "1px solid #1e3a5f", color: "#e6edf3" } as const;
 
   if (!loadingPro && !isPro) {
     return (
       <DashboardLayout title="Zeiterfassung" subtitle="Pro-Feature">
         <div className="flex flex-col items-center justify-center py-24 gap-6">
-          <div
-            className="flex items-center justify-center w-16 h-16 rounded-full"
-            style={{ background: "#f5a62322", border: "1px solid #f5a62366" }}
-          >
+          <div className="flex items-center justify-center w-16 h-16 rounded-full"
+            style={{ background: "#f5a62322", border: "1px solid #f5a62366" }}>
             <Lock size={28} style={{ color: "#f5a623" }} />
           </div>
           <div className="text-center">
@@ -134,13 +275,10 @@ export default function ZeiterfassungPage() {
               Stunden erfassen, Wochenübersicht und Timer sind nur im Pro-Plan verfügbar.
             </p>
           </div>
-          <button
-            onClick={() => router.push("/upgrade")}
-            className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all hover:opacity-90"
-            style={{ background: "linear-gradient(135deg, #f5a623, #c4841c)", color: "#0d1b2e" }}
-          >
-            <Zap size={16} />
-            Auf Pro upgraden — 9,99€/Monat
+          <button onClick={() => router.push("/upgrade")}
+            className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold hover:opacity-90"
+            style={{ background: "linear-gradient(135deg, #f5a623, #c4841c)", color: "#0d1b2e" }}>
+            <Zap size={16} />Auf Pro upgraden — 9,99€/Monat
           </button>
         </div>
       </DashboardLayout>
@@ -148,72 +286,133 @@ export default function ZeiterfassungPage() {
   }
 
   return (
-    <DashboardLayout title="Zeiterfassung" subtitle={`Diese Woche: ${weekHours}h`}>
+    <DashboardLayout title="Zeiterfassung" subtitle={`KW ${getKW(now)} · ${weekHours.toFixed(1)}h diese Woche`}>
+
+      {/* Timer + Weekly */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 mb-6">
-        {/* Timer widget */}
-        <div
-          className="xl:col-span-1 rounded-xl p-6 flex flex-col items-center justify-center"
-          style={{ background: "#112240", border: isRunning ? "1px solid #22c55e44" : "1px solid #1e3a5f" }}
-        >
-          <div
-            className="flex items-center justify-center w-16 h-16 rounded-full mb-4"
-            style={{ background: isRunning ? "#22c55e18" : "#00c6ff18", border: `2px solid ${isRunning ? "#22c55e44" : "#00c6ff44"}` }}
-          >
-            <Clock size={28} style={{ color: isRunning ? "#22c55e" : "#00c6ff" }} />
+
+        {/* Timer Card */}
+        <div className="xl:col-span-1 rounded-2xl p-5 flex flex-col gap-4"
+          style={{ background: "#112240", border: timerRunning ? "1px solid #22c55e55" : "1px solid #1e3a5f" }}>
+          {/* Display */}
+          <div className="flex flex-col items-center pt-2 pb-1">
+            <div className="flex items-center justify-center w-14 h-14 rounded-full mb-3"
+              style={{ background: timerRunning ? "#22c55e14" : "#00c6ff14", border: `2px solid ${timerRunning ? "#22c55e44" : "#00c6ff44"}` }}>
+              <Clock size={26} style={{ color: timerRunning ? "#22c55e" : "#00c6ff" }} />
+            </div>
+            <p className="font-mono font-bold" style={{ color: "#e6edf3", fontSize: 44, letterSpacing: 2, lineHeight: 1 }}>
+              {formatTime(timerSeconds)}
+            </p>
+            <p className="text-xs mt-2 text-center" style={{ color: timerRunning ? "#22c55e" : "#4a6fa5", minHeight: 18 }}>
+              {timerRunning
+                ? `${timerProjekt || "—"} · ${timerTaetigkeit}${timerMitarbeiter ? ` · ${timerMitarbeiter}` : ""}`
+                : "Bereit zum Starten"}
+            </p>
           </div>
 
-          <p className="text-4xl font-bold mb-1 font-mono" style={{ color: "#e6edf3" }}>
-            {formatTime(seconds)}
-          </p>
-          <p className="text-xs mb-6" style={{ color: "#8b9ab5" }}>
-            {isRunning ? "Läuft..." : "Gestoppt"}
-          </p>
+          {/* Pre-start fields */}
+          {!timerRunning && (
+            <div className="space-y-2.5">
+              <div>
+                <label className="block text-xs font-medium mb-1" style={{ color: "#8b9ab5" }}>Projekt</label>
+                <input
+                  list="projekte-dl"
+                  value={timerProjekt}
+                  onChange={(e) => {
+                    setTimerProjekt(e.target.value);
+                    const found = projekte.find((p) => p.title === e.target.value);
+                    setTimerProjektId(found?._id || "");
+                  }}
+                  placeholder="Projekt wählen oder eingeben…"
+                  className="w-full px-3 py-2 rounded-xl text-sm outline-none"
+                  style={inputSty}
+                  onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
+                  onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
+                />
+                <datalist id="projekte-dl">
+                  {projekte.map((p) => <option key={p._id} value={p.title} />)}
+                </datalist>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-medium mb-1" style={{ color: "#8b9ab5" }}>Tätigkeit</label>
+                  <select value={timerTaetigkeit} onChange={(e) => setTimerTaetigkeit(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl text-sm outline-none" style={inputSty}>
+                    {TAETIGKEITEN.map((t) => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1" style={{ color: "#8b9ab5" }}>Mitarbeiter</label>
+                  <input value={timerMitarbeiter} onChange={(e) => setTimerMitarbeiter(e.target.value)}
+                    placeholder="Name…"
+                    className="w-full px-3 py-2 rounded-xl text-sm outline-none" style={inputSty}
+                    onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
+                    onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
 
+          {/* START / STOP */}
           <button
-            onClick={() => { setIsRunning(!isRunning); if (isRunning) setSeconds(0); }}
-            className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold transition-all hover:scale-105"
+            onClick={timerRunning ? stopTimer : startTimer}
+            className="w-full rounded-xl font-bold flex items-center justify-center gap-2.5 transition-all hover:opacity-90 active:scale-95"
             style={{
-              background: isRunning ? "linear-gradient(135deg, #ef4444, #c0392b)" : "linear-gradient(135deg, #22c55e, #16a34a)",
+              background: timerRunning
+                ? "linear-gradient(135deg, #ef4444, #c0392b)"
+                : "linear-gradient(135deg, #22c55e, #16a34a)",
               color: "#fff",
+              minHeight: 56,
+              fontSize: 18,
             }}
           >
-            {isRunning ? <Square size={16} /> : <Play size={16} />}
-            {isRunning ? "Stoppen" : "Starten"}
+            {timerRunning ? <Square size={22} /> : <Play size={22} />}
+            {timerRunning ? "Stoppen" : "Starten"}
           </button>
         </div>
 
-        {/* Week summary */}
-        <div className="xl:col-span-2 rounded-xl p-5" style={{ background: "#112240", border: "1px solid #1e3a5f" }}>
-          <h2 className="text-base font-bold mb-4" style={{ color: "#e6edf3", fontFamily: "var(--font-syne)" }}>
-            Diese Woche
+        {/* Weekly Summary */}
+        <div className="xl:col-span-2 rounded-2xl p-5" style={{ background: "#112240", border: "1px solid #1e3a5f" }}>
+          <h2 className="text-sm font-bold mb-4" style={{ color: "#e6edf3", fontFamily: "var(--font-syne)" }}>
+            Diese Woche — KW {getKW(now)}
           </h2>
-          <div className="grid grid-cols-3 gap-3 mb-4">
+          <div className="grid grid-cols-3 gap-3 mb-5">
             {[
-              { label: "Wochenstunden", value: `${weekHours}h`, color: "#00c6ff" },
-              { label: "Einträge", value: entries.length, color: "#f5a623" },
-              { label: "Gesamt", value: `${totalHours}h`, color: "#22c55e" },
+              { label: "Wochenstunden", value: `${weekHours.toFixed(1)}h`, color: "#00c6ff" },
+              { label: "Einträge gesamt", value: entries.length, color: "#f5a623" },
+              { label: "Gesamtstunden", value: `${totalHours.toFixed(1)}h`, color: "#22c55e" },
             ].map((s) => (
-              <div key={s.label} className="rounded-lg p-3 text-center" style={{ background: "#0d1b2e", border: "1px solid #1e3a5f" }}>
+              <div key={s.label} className="rounded-xl p-3 text-center" style={{ background: "#0d1b2e", border: "1px solid #1e3a5f" }}>
                 <p className="text-xl font-bold" style={{ color: s.color, fontFamily: "var(--font-syne)" }}>{s.value}</p>
                 <p className="text-xs mt-0.5" style={{ color: "#8b9ab5" }}>{s.label}</p>
               </div>
             ))}
           </div>
 
-          {/* Day bars */}
-          <div className="flex items-end gap-2 h-16">
+          {/* Mo–So Bars */}
+          <div className="flex items-end gap-1.5" style={{ height: 88 }}>
             {dayNames.map((day, i) => {
               const h = dayHours[i];
               const pct = (h / maxDay) * 100;
+              const isToday = i === todayIdx;
               return (
                 <div key={day} className="flex-1 flex flex-col items-center gap-1">
-                  <div className="w-full flex flex-col justify-end" style={{ height: "44px" }}>
-                    <div
-                      className="w-full rounded-t-sm transition-all"
-                      style={{ height: `${pct}%`, background: h > 0 ? "#00c6ff" : "#1e3a5f", minHeight: h > 0 ? "4px" : "2px" }}
+                  <span className="text-xs font-mono" style={{ color: h > 0 ? "#00c6ff" : "transparent", fontSize: 9, height: 14 }}>
+                    {h > 0 ? `${h}h` : ""}
+                  </span>
+                  <div className="w-full flex flex-col justify-end" style={{ height: 52 }}>
+                    <div className="w-full rounded-t transition-all duration-300"
+                      style={{
+                        height: h > 0 ? `${Math.max(pct, 8)}%` : "2px",
+                        background: isToday ? "#00c6ff" : (h > 0 ? "#00c6ff66" : "#1e3a5f"),
+                      }}
                     />
                   </div>
-                  <span className="text-xs" style={{ color: "#8b9ab5" }}>{day}</span>
+                  <span className="text-xs font-semibold"
+                    style={{ color: isToday ? "#e6edf3" : "#4a6fa5", fontSize: 10 }}>
+                    {day}
+                  </span>
                 </div>
               );
             })}
@@ -221,17 +420,26 @@ export default function ZeiterfassungPage() {
         </div>
       </div>
 
-      {/* Entries table */}
-      <div className="rounded-xl overflow-hidden" style={{ border: "1px solid #1e3a5f" }}>
-        <div className="flex items-center justify-between px-4 py-3" style={{ background: "#112240", borderBottom: "1px solid #1e3a5f" }}>
+      {/* Entries */}
+      <div className="rounded-2xl overflow-visible" style={{ border: "1px solid #1e3a5f" }}>
+        <div className="flex items-center justify-between px-4 py-3"
+          style={{ background: "#112240", borderBottom: "1px solid #1e3a5f", borderRadius: "16px 16px 0 0" }}>
           <h2 className="text-sm font-bold" style={{ color: "#e6edf3", fontFamily: "var(--font-syne)" }}>Zeiteinträge</h2>
-          <button
-            onClick={openNew}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
-            style={{ background: "linear-gradient(135deg, #00c6ff, #0099cc)", color: "#0d1b2e" }}
-          >
-            <Plus size={13} /> Eintrag hinzufügen
-          </button>
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            {selectedEntries.size > 0 && (
+              <button onClick={openInvoiceModal}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold hover:opacity-90"
+                style={{ background: "linear-gradient(135deg, #22c55e, #16a34a)", color: "#fff" }}>
+                <Receipt size={13} />In Rechnung ({selectedEntries.size})
+              </button>
+            )}
+            <button
+              onClick={() => { setManualForm({ ...EMPTY_FORM, date: new Date().toISOString().split("T")[0] }); setManualModalOpen(true); }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold"
+              style={{ background: "linear-gradient(135deg, #00c6ff, #0099cc)", color: "#0d1b2e" }}>
+              <Plus size={13} />Nachtragen
+            </button>
+          </div>
         </div>
 
         {loading ? (
@@ -239,109 +447,235 @@ export default function ZeiterfassungPage() {
             <Loader size={20} className="animate-spin" style={{ color: "#00c6ff" }} />
           </div>
         ) : entries.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 gap-3" style={{ background: "#0d1b2e" }}>
+          <div className="flex flex-col items-center justify-center py-16 gap-3" style={{ background: "#0d1b2e", borderRadius: "0 0 16px 16px" }}>
             <Clock size={28} style={{ color: "#1e3a5f" }} />
             <p className="text-sm" style={{ color: "#8b9ab5" }}>Noch keine Zeiteinträge</p>
-            <button onClick={openNew} className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold"
-              style={{ background: "linear-gradient(135deg, #00c6ff, #0099cc)", color: "#0d1b2e" }}>
-              <Plus size={13} /> Ersten Eintrag hinzufügen
-            </button>
           </div>
         ) : (
-          entries.map((entry, i) => (
-            <div
-              key={entry._id || i}
-              className="flex items-center gap-4 px-4 py-3 transition-all group"
-              style={{ background: i % 2 === 0 ? "#0d1b2e" : "#112240", borderBottom: i < entries.length - 1 ? "1px solid #1e3a5f44" : "none" }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = "#00c6ff08"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = i % 2 === 0 ? "#0d1b2e" : "#112240"; }}
-            >
-              <div className="flex items-center gap-1.5 w-24 shrink-0 text-xs" style={{ color: "#8b9ab5" }}>
-                <Calendar size={11} />
-                {entry.date ? new Date(entry.date).toLocaleDateString("de-DE", { day: "2-digit", month: "short" }) : "—"}
-              </div>
-              <div className="flex items-center gap-1.5 w-40 shrink-0 text-xs" style={{ color: "#8b9ab5" }}>
-                <Briefcase size={11} />
-                <span className="truncate">{entry.projectName}</span>
-              </div>
-              <p className="flex-1 text-sm" style={{ color: "#e6edf3" }}>{entry.description}</p>
-              <div className="px-3 py-1 rounded-full text-xs font-bold" style={{ background: "#00c6ff18", color: "#00c6ff", border: "1px solid #00c6ff33" }}>
-                {entry.hours}h
-              </div>
-              <button
-                onClick={() => handleDelete(entry)}
-                className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
-                style={{ color: "#ef4444" }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = "#ef444418"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
-              >
-                <Trash2 size={13} />
-              </button>
+          <>
+            {/* Desktop header */}
+            <div className="hidden md:grid grid-cols-12 px-4 py-2 text-xs font-medium"
+              style={{ background: "#0a1628", color: "#4a6fa5", borderBottom: "1px solid #1e3a5f" }}>
+              <div className="col-span-1" />
+              <div className="col-span-2">Datum</div>
+              <div className="col-span-3">Projekt</div>
+              <div className="col-span-2">Tätigkeit</div>
+              <div className="col-span-2">Mitarbeiter</div>
+              <div className="col-span-1">Std.</div>
+              <div className="col-span-1" />
             </div>
-          ))
+            {entries.map((entry, i) => {
+              const isSelected = entry._id ? selectedEntries.has(entry._id) : false;
+              return (
+                <div key={entry._id || i}
+                  className="flex md:grid md:grid-cols-12 items-center px-4 py-3 gap-3 transition-all group"
+                  style={{
+                    background: isSelected ? "#00c6ff0a" : (i % 2 === 0 ? "#0d1b2e" : "#112240"),
+                    borderBottom: i < entries.length - 1 ? "1px solid #1e3a5f33" : "none",
+                    borderRadius: i === entries.length - 1 ? "0 0 16px 16px" : "0",
+                  }}>
+                  {/* Checkbox */}
+                  <div className="col-span-1 shrink-0">
+                    <button
+                      onClick={() => entry._id && toggleSelect(entry._id)}
+                      className="w-5 h-5 rounded flex items-center justify-center transition-all"
+                      style={{
+                        background: isSelected ? "#00c6ff" : "transparent",
+                        border: `1.5px solid ${isSelected ? "#00c6ff" : "#2a4a6f"}`,
+                      }}>
+                      {isSelected && <Check size={11} style={{ color: "#0d1b2e" }} />}
+                    </button>
+                  </div>
+                  {/* Date */}
+                  <div className="col-span-2 text-xs flex items-center gap-1.5 shrink-0" style={{ color: "#8b9ab5" }}>
+                    <Calendar size={11} />
+                    {entry.date ? new Date(entry.date + "T12:00:00").toLocaleDateString("de-DE", { day: "2-digit", month: "short" }) : "—"}
+                  </div>
+                  {/* Projekt */}
+                  <div className="col-span-3 text-sm font-medium truncate flex-1 md:flex-none" style={{ color: "#e6edf3" }}>
+                    <span className="flex items-center gap-1.5">
+                      <Briefcase size={11} style={{ color: "#4a6fa5", flexShrink: 0 }} />
+                      <span className="truncate">{entry.projektName || "—"}</span>
+                    </span>
+                  </div>
+                  {/* Tätigkeit */}
+                  <div className="hidden md:block col-span-2">
+                    <span className="text-xs px-2 py-0.5 rounded-full"
+                      style={{ background: "#00c6ff14", color: "#00c6ff", border: "1px solid #00c6ff2a" }}>
+                      {entry.taetigkeit || "—"}
+                    </span>
+                  </div>
+                  {/* Mitarbeiter */}
+                  <div className="hidden md:flex col-span-2 text-xs items-center gap-1" style={{ color: "#8b9ab5" }}>
+                    {entry.mitarbeiter && <><User size={11} />{entry.mitarbeiter}</>}
+                  </div>
+                  {/* Hours */}
+                  <div className="col-span-1 shrink-0">
+                    <span className="px-2.5 py-1 rounded-full text-xs font-bold"
+                      style={{ background: "#22c55e14", color: "#22c55e", border: "1px solid #22c55e2a" }}>
+                      {entry.hours}h
+                    </span>
+                  </div>
+                  {/* Delete */}
+                  <div className="col-span-1 flex justify-end">
+                    <button onClick={() => handleDelete(entry)}
+                      className="p-1.5 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                      style={{ color: "#ef4444" }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = "#ef444418"; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </>
         )}
       </div>
 
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Zeiteintrag hinzufügen">
-        <form onSubmit={handleSave} className="space-y-4">
+      {/* === Modal: Eintrag nach Timer-Stop === */}
+      <Modal open={saveModalOpen} onClose={() => setSaveModalOpen(false)} title="Zeiteintrag speichern">
+        <form onSubmit={(e) => { e.preventDefault(); handleSaveEntry(saveForm, () => setSaveModalOpen(false)); }} className="space-y-4">
+          <div className="flex items-center gap-3 p-3 rounded-xl" style={{ background: "#0d1b2e", border: "1px solid #1e3a5f" }}>
+            <Clock size={16} style={{ color: "#00c6ff" }} />
+            <div className="text-sm">
+              <span className="font-medium" style={{ color: "#e6edf3" }}>{saveForm.projektName || "Kein Projekt"}</span>
+              <span style={{ color: "#4a6fa5" }}> · {saveForm.taetigkeit}{saveForm.mitarbeiter ? ` · ${saveForm.mitarbeiter}` : ""}</span>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Stunden *</label>
+              <input type="number" min="0.5" max="24" step="0.5" required
+                value={saveForm.hours}
+                onChange={(e) => setSaveForm({ ...saveForm, hours: Number(e.target.value) })}
+                className="w-full px-3 py-2.5 rounded-xl text-sm outline-none" style={inputSty}
+                onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Stundensatz €</label>
+              <input type="number" min="1"
+                value={saveForm.stundensatz}
+                onChange={(e) => setSaveForm({ ...saveForm, stundensatz: Number(e.target.value) })}
+                className="w-full px-3 py-2.5 rounded-xl text-sm outline-none" style={inputSty}
+                onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
+              />
+            </div>
+          </div>
           <div>
-            <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Projekt *</label>
-            <input
-              required
-              value={form.projectName}
-              onChange={(e) => setForm({ ...form, projectName: e.target.value })}
-              placeholder="z.B. Wohnanlage Bergstraße"
-              className="w-full px-4 py-2.5 rounded-xl text-sm outline-none"
-              style={{ background: "#0d1b2e", border: "1px solid #1e3a5f", color: "#e6edf3" }}
+            <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Notiz (optional)</label>
+            <input value={saveForm.description || ""}
+              onChange={(e) => setSaveForm({ ...saveForm, description: e.target.value })}
+              placeholder="z.B. Kabelverlegung EG"
+              className="w-full px-3 py-2.5 rounded-xl text-sm outline-none" style={inputSty}
               onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
               onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
             />
           </div>
+          <div className="flex gap-3">
+            <button type="button" onClick={() => setSaveModalOpen(false)}
+              className="flex-1 py-2.5 rounded-xl text-sm font-semibold"
+              style={{ background: "#0d1b2e", border: "1px solid #1e3a5f", color: "#8b9ab5" }}>
+              Verwerfen
+            </button>
+            <button type="submit" disabled={saving}
+              className="flex-1 py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50"
+              style={{ background: "linear-gradient(135deg, #00c6ff, #0099cc)", color: "#0d1b2e" }}>
+              {saving ? "Speichern…" : "Speichern"}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* === Modal: Manueller Eintrag === */}
+      <Modal open={manualModalOpen} onClose={() => setManualModalOpen(false)} title="Zeit nachtragen">
+        <form onSubmit={(e) => { e.preventDefault(); handleSaveEntry(manualForm, () => setManualModalOpen(false)); }} className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Projekt *</label>
+            <input list="projekte-dl-manual" required
+              value={manualForm.projektName}
+              onChange={(e) => {
+                const found = projekte.find((p) => p.title === e.target.value);
+                setManualForm({ ...manualForm, projektName: e.target.value, projektId: found?._id || "" });
+              }}
+              placeholder="Projekt wählen oder eingeben…"
+              className="w-full px-3 py-2.5 rounded-xl text-sm outline-none" style={inputSty}
+              onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
+            />
+            <datalist id="projekte-dl-manual">
+              {projekte.map((p) => <option key={p._id} value={p.title} />)}
+            </datalist>
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Datum</label>
-              <input
-                type="date"
-                value={form.date}
-                onChange={(e) => setForm({ ...form, date: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-xl text-sm outline-none"
-                style={{ background: "#0d1b2e", border: "1px solid #1e3a5f", color: "#e6edf3" }}
+              <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Tätigkeit</label>
+              <select value={manualForm.taetigkeit}
+                onChange={(e) => setManualForm({ ...manualForm, taetigkeit: e.target.value })}
+                className="w-full px-3 py-2.5 rounded-xl text-sm outline-none" style={inputSty}>
+                {TAETIGKEITEN.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Mitarbeiter</label>
+              <input value={manualForm.mitarbeiter}
+                onChange={(e) => setManualForm({ ...manualForm, mitarbeiter: e.target.value })}
+                placeholder="Name…"
+                className="w-full px-3 py-2.5 rounded-xl text-sm outline-none" style={inputSty}
+                onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Datum *</label>
+              <input type="date" required
+                value={manualForm.date}
+                onChange={(e) => setManualForm({ ...manualForm, date: e.target.value })}
+                className="w-full px-3 py-2.5 rounded-xl text-sm outline-none" style={inputSty}
                 onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
                 onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
               />
             </div>
             <div>
               <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Stunden *</label>
-              <input
-                required
-                type="number"
-                min="0.5"
-                max="24"
-                step="0.5"
-                value={form.hours}
-                onChange={(e) => setForm({ ...form, hours: Number(e.target.value) })}
-                className="w-full px-4 py-2.5 rounded-xl text-sm outline-none"
-                style={{ background: "#0d1b2e", border: "1px solid #1e3a5f", color: "#e6edf3" }}
+              <input type="number" min="0.5" max="24" step="0.5" required
+                value={manualForm.hours}
+                onChange={(e) => setManualForm({ ...manualForm, hours: Number(e.target.value) })}
+                className="w-full px-3 py-2.5 rounded-xl text-sm outline-none" style={inputSty}
                 onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
                 onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
               />
             </div>
           </div>
-          <div>
-            <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Beschreibung</label>
-            <textarea
-              value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-              placeholder="z.B. Kabelverlegung EG"
-              rows={3}
-              className="w-full px-4 py-2.5 rounded-xl text-sm outline-none resize-none"
-              style={{ background: "#0d1b2e", border: "1px solid #1e3a5f", color: "#e6edf3" }}
-              onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
-              onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Stundensatz €</label>
+              <input type="number" min="1"
+                value={manualForm.stundensatz}
+                onChange={(e) => setManualForm({ ...manualForm, stundensatz: Number(e.target.value) })}
+                className="w-full px-3 py-2.5 rounded-xl text-sm outline-none" style={inputSty}
+                onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Notiz</label>
+              <input value={manualForm.description || ""}
+                onChange={(e) => setManualForm({ ...manualForm, description: e.target.value })}
+                placeholder="optional…"
+                className="w-full px-3 py-2.5 rounded-xl text-sm outline-none" style={inputSty}
+                onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
+              />
+            </div>
           </div>
-          <div className="flex gap-3 pt-2">
-            <button type="button" onClick={() => setModalOpen(false)}
+          <div className="flex gap-3">
+            <button type="button" onClick={() => setManualModalOpen(false)}
               className="flex-1 py-2.5 rounded-xl text-sm font-semibold"
               style={{ background: "#0d1b2e", border: "1px solid #1e3a5f", color: "#8b9ab5" }}>
               Abbrechen
@@ -349,10 +683,67 @@ export default function ZeiterfassungPage() {
             <button type="submit" disabled={saving}
               className="flex-1 py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50"
               style={{ background: "linear-gradient(135deg, #00c6ff, #0099cc)", color: "#0d1b2e" }}>
-              {saving ? "Wird gespeichert..." : "Speichern"}
+              {saving ? "Speichern…" : "Speichern"}
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* === Modal: In Rechnung übernehmen === */}
+      <Modal open={invoiceModalOpen} onClose={() => setInvoiceModalOpen(false)} title="In Rechnung übernehmen">
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Kundenname *</label>
+            <input value={invoiceKunde}
+              onChange={(e) => setInvoiceKunde(e.target.value)}
+              placeholder="Kundenname…"
+              className="w-full px-3 py-2.5 rounded-xl text-sm outline-none" style={inputSty}
+              onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: "#8b9ab5" }}>Stundensatz (€/Std.)</label>
+            <input type="number" min="1"
+              value={invoiceStundensatz}
+              onChange={(e) => setInvoiceStundensatz(Number(e.target.value))}
+              className="w-full px-3 py-2.5 rounded-xl text-sm outline-none" style={inputSty}
+              onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
+            />
+          </div>
+          <div className="rounded-xl p-3 space-y-2" style={{ background: "#0d1b2e", border: "1px solid #1e3a5f" }}>
+            <p className="text-xs font-medium mb-2" style={{ color: "#4a6fa5" }}>Vorschau Positionen:</p>
+            {selectedData.map((e, i) => (
+              <div key={i} className="flex items-center justify-between text-xs gap-2">
+                <span className="flex-1 truncate" style={{ color: "#8b9ab5" }}>
+                  {e.taetigkeit}{e.projektName ? ` – ${e.projektName}` : ""}{e.mitarbeiter ? ` (${e.mitarbeiter})` : ""}
+                </span>
+                <span className="shrink-0 font-medium" style={{ color: "#e6edf3" }}>
+                  {e.hours}h × {invoiceStundensatz}€ = {(e.hours * invoiceStundensatz).toFixed(2)}€
+                </span>
+              </div>
+            ))}
+            <div className="flex justify-between pt-2" style={{ borderTop: "1px solid #1e3a5f" }}>
+              <span className="text-xs font-bold" style={{ color: "#e6edf3" }}>Gesamtbetrag:</span>
+              <span className="text-sm font-bold" style={{ color: "#00c6ff" }}>
+                {selectedData.reduce((s, e) => s + e.hours * invoiceStundensatz, 0).toFixed(2)} €
+              </span>
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <button onClick={() => setInvoiceModalOpen(false)}
+              className="flex-1 py-2.5 rounded-xl text-sm font-semibold"
+              style={{ background: "#0d1b2e", border: "1px solid #1e3a5f", color: "#8b9ab5" }}>
+              Abbrechen
+            </button>
+            <button onClick={createInvoice} disabled={invoiceSaving || !invoiceKunde.trim()}
+              className="flex-1 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
+              style={{ background: "linear-gradient(135deg, #22c55e, #16a34a)", color: "#fff" }}>
+              <Receipt size={15} />{invoiceSaving ? "Wird erstellt…" : "Rechnung erstellen"}
+            </button>
+          </div>
+        </div>
       </Modal>
     </DashboardLayout>
   );

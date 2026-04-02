@@ -7,7 +7,7 @@ import EmptyState from "@/components/ui/EmptyState";
 import { useRouter } from "next/navigation";
 import { usePro } from "@/context/ProContext";
 import {
-  FileText, Plus, Search, MoreVertical, AlertCircle, Trash2, Edit, Loader, Send,
+  FileText, Plus, Search, MoreVertical, AlertCircle, Trash2, Edit, Loader, Send, FolderPlus,
 } from "lucide-react";
 
 interface OfferItem {
@@ -54,7 +54,25 @@ export default function AngebotePage() {
   const [validUntil, setValidUntil] = useState("");
   const [items, setItems] = useState<OfferItem[]>([{ ...EMPTY_ITEM }]);
 
-  useEffect(() => { fetchAngebote(); }, []);
+  useEffect(() => { fetchAngebote(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleConvertToProjekt = async (angebot: Offer) => {
+    if (!confirm(`Angebot ${angebot.number} in neues Projekt umwandeln?`)) return;
+    try {
+      const res = await fetch("/api/projekte", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: `Projekt – ${angebot.customerName || angebot.number}`,
+          customerName: angebot.customerName || "",
+          status: "active",
+          startDate: new Date().toISOString().split("T")[0],
+          description: `Erstellt aus Angebot ${angebot.number}`,
+        }),
+      });
+      if (res.ok) router.push("/projekte");
+    } catch { /* */ }
+  };
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -275,7 +293,14 @@ export default function AngebotePage() {
                   onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
                   <Edit size={13} /> Bearbeiten
                 </button>
-                <button onClick={() => handleDelete(angebot)}
+                <button onClick={() => { handleConvertToProjekt(angebot); setMenuOpen(null); }}
+                  className="flex items-center gap-2 w-full px-4 py-2 text-sm transition-all"
+                  style={{ color: "#22c55e" }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = "#22c55e18"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
+                  <FolderPlus size={13} /> In Projekt umwandeln
+                </button>
+                <button onClick={() => { handleDelete(angebot); setMenuOpen(null); }}
                   className="flex items-center gap-2 w-full px-4 py-2 text-sm transition-all"
                   style={{ color: "#ef4444" }}
                   onMouseEnter={(e) => { e.currentTarget.style.background = "#ef444418"; }}

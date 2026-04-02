@@ -20,9 +20,13 @@ interface InvoiceItem {
   mitarbeiter?: number;
 }
 
+interface Projekt { _id: string; title: string; customerName: string; }
+
 interface Invoice {
   _id?: string;
   number: string;
+  projektId?: string;
+  projektName?: string;
   customerName: string;
   customerAddress?: string;
   abrechnungsart: Abrechnungsart;
@@ -75,6 +79,9 @@ export default function RechnungenPage() {
   const [saving, setSaving] = useState(false);
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
   const [tab, setTab] = useState<"positionen" | "footer">("positionen");
+  const [projekte, setProjekte] = useState<Projekt[]>([]);
+  const [projektId, setProjektId] = useState("");
+  const [projektName, setProjektName] = useState("");
 
   // Form fields
   const [customerName, setCustomerName] = useState("");
@@ -91,7 +98,15 @@ export default function RechnungenPage() {
   const [firmenOrt, setFirmenOrt] = useState("");
   const [items, setItems] = useState<InvoiceItem[]>([{ ...EMPTY_ITEM }]);
 
-  useEffect(() => { fetchRechnungen(); }, []);
+  useEffect(() => { fetchRechnungen(); fetchProjekte(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const fetchProjekte = async () => {
+    try {
+      const res = await fetch("/api/projekte");
+      const data = await res.json();
+      setProjekte(Array.isArray(data) ? data : []);
+    } catch { /* */ }
+  };
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -112,6 +127,7 @@ export default function RechnungenPage() {
 
   const openNew = () => {
     setEditRechnung(null);
+    setProjektId(""); setProjektName("");
     setCustomerName(""); setCustomerAddress(""); setAbrechnungsart("festpreis");
     setBetreff(""); setZahlungsziel("14 Tage netto");
     setSteuernummer(""); setIban(""); setBic(""); setBank("");
@@ -123,6 +139,7 @@ export default function RechnungenPage() {
 
   const openEdit = (r: Invoice) => {
     setEditRechnung(r);
+    setProjektId(r.projektId || ""); setProjektName(r.projektName || "");
     setCustomerName(r.customerName); setCustomerAddress(r.customerAddress || "");
     setAbrechnungsart(r.abrechnungsart || "festpreis");
     setBetreff(r.betreff || ""); setZahlungsziel(r.zahlungsziel || "14 Tage netto");
@@ -171,6 +188,7 @@ export default function RechnungenPage() {
     setSaving(true);
     try {
       const payload: Partial<Invoice> = {
+        projektId: projektId || undefined, projektName: projektName || undefined,
         customerName: customerName.trim(), customerAddress: customerAddress.trim(),
         abrechnungsart, betreff, zahlungsziel, steuernummer, iban, bic, bank,
         firmenname, firmenStrasse, firmenOrt,
@@ -328,6 +346,28 @@ export default function RechnungenPage() {
 
         {tab === "positionen" && (
           <div className="space-y-4">
+            {/* Projekt-Auswahl */}
+            <div>
+              <label className="block text-xs font-medium mb-1" style={{ color: "#8b9ab5" }}>Projekt (optional)</label>
+              <select
+                value={projektId}
+                onChange={(e) => {
+                  const found = projekte.find((p) => p._id === e.target.value);
+                  setProjektId(e.target.value);
+                  setProjektName(found?.title || "");
+                  if (found && !customerName) setCustomerName(found.customerName || "");
+                  else if (found) setCustomerName(found.customerName || customerName);
+                }}
+                className="w-full px-3 py-2 rounded-lg text-sm outline-none"
+                style={inputSty}
+              >
+                <option value="">— Kein Projekt —</option>
+                {projekte.map((p) => (
+                  <option key={p._id} value={p._id}>{p.title}{p.customerName ? ` · ${p.customerName}` : ""}</option>
+                ))}
+              </select>
+            </div>
+
             {/* Kundendaten */}
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2">

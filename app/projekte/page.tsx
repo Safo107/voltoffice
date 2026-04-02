@@ -6,7 +6,7 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 import Modal from "@/components/ui/Modal";
 import EmptyState from "@/components/ui/EmptyState";
 import { usePro } from "@/context/ProContext";
-import { Briefcase, Plus, Search, MoreVertical, Calendar, User, AlertCircle, Trash2, Edit, Home, Building2, Factory } from "lucide-react";
+import { Briefcase, Plus, Search, MoreVertical, Calendar, User, AlertCircle, Trash2, Edit, Home, Building2, Factory, Package, X, Check } from "lucide-react";
 import SkeletonCard from "@/components/ui/SkeletonCard";
 
 interface Project {
@@ -16,6 +16,16 @@ interface Project {
   status: "active" | "paused" | "completed";
   startDate: string;
   description: string;
+}
+
+interface MaterialItem {
+  _id?: string;
+  projektId: string;
+  name: string;
+  menge: number;
+  einheit: string;
+  preis?: number;
+  verbraucht: boolean;
 }
 
 const statusConfig = {
@@ -39,6 +49,12 @@ export default function ProjektePage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
+  const [materialModalOpen, setMaterialModalOpen] = useState(false);
+  const [materialProjekt, setMaterialProjekt] = useState<Project | null>(null);
+  const [materials, setMaterials] = useState<MaterialItem[]>([]);
+  const [materialLoading, setMaterialLoading] = useState(false);
+  const [matForm, setMatForm] = useState({ name: "", menge: 1, einheit: "Stk.", preis: 0 });
+  const [matSaving, setMatSaving] = useState(false);
 
   useEffect(() => { fetchProjekte(); }, []);
 
@@ -99,6 +115,56 @@ export default function ProjektePage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const openMaterial = async (p: Project) => {
+    setMaterialProjekt(p);
+    setMaterialModalOpen(true);
+    setMenuOpen(null);
+    setMaterialLoading(true);
+    try {
+      const res = await fetch(`/api/material?projektId=${p._id}`);
+      const data = await res.json();
+      setMaterials(Array.isArray(data) ? data : []);
+    } catch { setMaterials([]); }
+    finally { setMaterialLoading(false); }
+  };
+
+  const addMaterial = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!materialProjekt?._id || !matForm.name.trim()) return;
+    setMatSaving(true);
+    try {
+      const res = await fetch("/api/material", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...matForm, projektId: materialProjekt._id, verbraucht: false }),
+      });
+      if (res.ok) {
+        const created = await res.json();
+        setMaterials((prev) => [created, ...prev]);
+        setMatForm({ name: "", menge: 1, einheit: "Stk.", preis: 0 });
+      }
+    } catch { /* */ }
+    finally { setMatSaving(false); }
+  };
+
+  const toggleVerbraucht = async (item: MaterialItem) => {
+    try {
+      await fetch(`/api/material/${item._id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ verbraucht: !item.verbraucht }),
+      });
+      setMaterials((prev) => prev.map((m) => m._id === item._id ? { ...m, verbraucht: !m.verbraucht } : m));
+    } catch { /* */ }
+  };
+
+  const deleteMaterial = async (item: MaterialItem) => {
+    try {
+      await fetch(`/api/material/${item._id}`, { method: "DELETE" });
+      setMaterials((prev) => prev.filter((m) => m._id !== item._id));
+    } catch { /* */ }
   };
 
   const handleDelete = async (p: Project) => {
@@ -205,6 +271,12 @@ export default function ProjektePage() {
                           onMouseEnter={(e) => { e.currentTarget.style.background = "#1e3a5f"; }}
                           onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
                           <Edit size={13} /> Bearbeiten
+                        </button>
+                        <button onClick={() => openMaterial(project)}
+                          className="flex items-center gap-2 w-full px-4 py-2 text-sm transition-all" style={{ color: "#f5a623" }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = "#f5a62318"; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
+                          <Package size={13} /> Material verwalten
                         </button>
                         <button onClick={() => handleDelete(project)}
                           className="flex items-center gap-2 w-full px-4 py-2 text-sm transition-all" style={{ color: "#ef4444" }}
@@ -346,6 +418,122 @@ export default function ProjektePage() {
             </button>
           </div>
         </form>
+      </Modal>
+      {/* Material Modal */}
+      <Modal
+        open={materialModalOpen}
+        onClose={() => setMaterialModalOpen(false)}
+        title={`Material – ${materialProjekt?.title || ""}`}
+        maxWidth="560px"
+      >
+        <div className="space-y-4">
+          {/* Add form */}
+          <form onSubmit={addMaterial} className="rounded-xl p-3 space-y-3" style={{ background: "#0d1b2e", border: "1px solid #1e3a5f" }}>
+            <p className="text-xs font-medium" style={{ color: "#4a6fa5" }}>Material hinzufügen</p>
+            <div className="flex gap-2">
+              <input
+                required value={matForm.name}
+                onChange={(e) => setMatForm({ ...matForm, name: e.target.value })}
+                placeholder="Name (z.B. NYM-J 3x1,5)"
+                className="flex-1 px-3 py-2 rounded-lg text-sm outline-none"
+                style={{ background: "#112240", border: "1px solid #1e3a5f", color: "#e6edf3" }}
+                onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
+              />
+            </div>
+            <div className="flex gap-2 items-center">
+              <input
+                type="number" min="0.01" step="any" required
+                value={matForm.menge}
+                onChange={(e) => setMatForm({ ...matForm, menge: Number(e.target.value) })}
+                placeholder="Menge"
+                className="w-20 px-3 py-2 rounded-lg text-sm outline-none text-center"
+                style={{ background: "#112240", border: "1px solid #1e3a5f", color: "#e6edf3" }}
+                onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
+              />
+              <select value={matForm.einheit} onChange={(e) => setMatForm({ ...matForm, einheit: e.target.value })}
+                className="px-3 py-2 rounded-lg text-sm outline-none"
+                style={{ background: "#112240", border: "1px solid #1e3a5f", color: "#e6edf3" }}>
+                {["Stk.", "m", "m²", "kg", "l", "Pkg.", "Rolle", "Set"].map((u) => (
+                  <option key={u} value={u}>{u}</option>
+                ))}
+              </select>
+              <input
+                type="number" min="0" step="0.01"
+                value={matForm.preis}
+                onChange={(e) => setMatForm({ ...matForm, preis: Number(e.target.value) })}
+                placeholder="Preis €"
+                className="w-24 px-3 py-2 rounded-lg text-sm outline-none"
+                style={{ background: "#112240", border: "1px solid #1e3a5f", color: "#e6edf3" }}
+                onFocus={(e) => { e.currentTarget.style.borderColor = "#00c6ff66"; }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; }}
+              />
+              <button type="submit" disabled={matSaving}
+                className="flex items-center gap-1 px-3 py-2 rounded-lg text-xs font-semibold disabled:opacity-50"
+                style={{ background: "linear-gradient(135deg, #00c6ff, #0099cc)", color: "#0d1b2e" }}>
+                <Plus size={13} />Hinzufügen
+              </button>
+            </div>
+          </form>
+
+          {/* Material list */}
+          {materialLoading ? (
+            <div className="text-center py-8" style={{ color: "#4a6fa5" }}>Laden…</div>
+          ) : materials.length === 0 ? (
+            <div className="text-center py-8 text-sm" style={{ color: "#8b9ab5" }}>
+              <Package size={24} className="mx-auto mb-2" style={{ color: "#1e3a5f" }} />
+              Noch kein Material erfasst
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              {materials.map((item) => (
+                <div key={item._id}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all"
+                  style={{ background: item.verbraucht ? "#22c55e08" : "#112240", border: `1px solid ${item.verbraucht ? "#22c55e2a" : "#1e3a5f"}` }}>
+                  <button
+                    onClick={() => toggleVerbraucht(item)}
+                    className="w-5 h-5 rounded flex items-center justify-center shrink-0 transition-all"
+                    style={{ background: item.verbraucht ? "#22c55e" : "transparent", border: `1.5px solid ${item.verbraucht ? "#22c55e" : "#2a4a6f"}` }}
+                    title={item.verbraucht ? "Als verfügbar markieren" : "Als verbraucht markieren"}>
+                    {item.verbraucht && <Check size={11} style={{ color: "#0d1b2e" }} />}
+                  </button>
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm font-medium truncate block" style={{ color: item.verbraucht ? "#4a6fa5" : "#e6edf3", textDecoration: item.verbraucht ? "line-through" : "none" }}>
+                      {item.name}
+                    </span>
+                  </div>
+                  <span className="text-xs font-medium shrink-0" style={{ color: "#8b9ab5" }}>
+                    {item.menge} {item.einheit}
+                  </span>
+                  {(item.preis ?? 0) > 0 && (
+                    <span className="text-xs shrink-0" style={{ color: "#f5a623" }}>
+                      {((item.preis ?? 0) * item.menge).toFixed(2)} €
+                    </span>
+                  )}
+                  <span className="text-xs px-1.5 py-0.5 rounded-full shrink-0"
+                    style={{ background: item.verbraucht ? "#22c55e18" : "#f5a62318", color: item.verbraucht ? "#22c55e" : "#f5a623", border: `1px solid ${item.verbraucht ? "#22c55e2a" : "#f5a6232a"}` }}>
+                    {item.verbraucht ? "Verbraucht" : "Verfügbar"}
+                  </span>
+                  <button onClick={() => deleteMaterial(item)}
+                    className="p-1 rounded-lg transition-all shrink-0"
+                    style={{ color: "#4a6fa5" }}
+                    onMouseEnter={(e) => { e.currentTarget.style.color = "#ef4444"; e.currentTarget.style.background = "#ef444418"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.color = "#4a6fa5"; e.currentTarget.style.background = "transparent"; }}>
+                    <X size={13} />
+                  </button>
+                </div>
+              ))}
+              {materials.some((m) => m.verbraucht && (m.preis ?? 0) > 0) && (
+                <div className="flex justify-end pt-1">
+                  <span className="text-xs font-bold px-3 py-1 rounded-full" style={{ background: "#22c55e18", color: "#22c55e", border: "1px solid #22c55e2a" }}>
+                    Verbraucht gesamt: {materials.filter((m) => m.verbraucht).reduce((s, m) => s + (m.preis ?? 0) * m.menge, 0).toFixed(2)} €
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </Modal>
     </DashboardLayout>
   );
