@@ -162,13 +162,23 @@ export default function RechnungenPage() {
         items, total: totalSum,
         status: editRechnung?.status || "offen",
       };
-      if (editRechnung?._id) {
-        await fetch(`/api/rechnungen/${editRechnung._id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-      } else {
-        await fetch("/api/rechnungen", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      const url = editRechnung?._id
+        ? `/api/rechnungen/${editRechnung._id}`
+        : "/api/rechnungen";
+      const res = await fetch(url, {
+        method: editRechnung?._id ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(err.error || "Speichern fehlgeschlagen. Bitte erneut versuchen.");
+        return;
       }
       setModalOpen(false);
-      fetchRechnungen();
+      await fetchRechnungen();
+    } catch {
+      alert("Verbindungsfehler. Bitte Internetverbindung prüfen.");
     } finally { setSaving(false); }
   };
 
