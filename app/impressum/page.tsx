@@ -28,16 +28,15 @@ export default function ImpressumPage() {
         <h1 className="text-3xl font-bold mb-2" style={{ fontFamily: "var(--font-syne)", color: "#e6edf3" }}>
           Impressum
         </h1>
-        <p className="text-sm mb-10" style={{ color: "#8b9ab5" }}>Angaben gemäß § 5 TMG — Stand: April 2026</p>
+        <p className="text-sm mb-10" style={{ color: "#8b9ab5" }}>Angaben gemäß § 5 DDG — Stand: April 2026</p>
 
         <section className="mb-8">
           <h2 className="text-base font-semibold mb-3" style={{ color: "#00c6ff" }}>Anbieter</h2>
           <div className="rounded-xl p-5 text-sm leading-relaxed space-y-1" style={{ background: "#112240", border: "1px solid #1e3a5f", color: "#c8dff0" }}>
             <p><strong style={{ color: "#e6edf3" }}>ElektroGenius</strong></p>
             <p>Safin Deler Yezdin Al Ali</p>
-            <p>c/o Postflex PFX-938-000</p>
-            <p>Emsdettener Str. 10</p>
-            <p>48268 Greven</p>
+            <p>Nördlinger Str. 1</p>
+            <p>51103 Köln</p>
             <p>Deutschland</p>
           </div>
         </section>
@@ -118,9 +117,8 @@ export default function ImpressumPage() {
         <section className="mb-8">
           <h2 className="text-base font-semibold mb-3" style={{ color: "#00c6ff" }}>Verantwortlich für den Inhalt</h2>
           <div className="rounded-xl p-5 text-sm leading-relaxed" style={{ background: "#112240", border: "1px solid #1e3a5f", color: "#c8dff0" }}>
-            <p>Gemäß § 55 Abs. 2 RStV:</p>
-            <p className="mt-1"><strong style={{ color: "#e6edf3" }}>Safin Deler Yezdin Al Ali</strong></p>
-            <p>c/o Postflex PFX-938-000, Emsdettener Str. 10, 48268 Greven</p>
+            <p><strong style={{ color: "#e6edf3" }}>Safin Deler Yezdin Al Ali</strong></p>
+            <p>Nördlinger Str. 1, 51103 Köln</p>
           </div>
         </section>
 
