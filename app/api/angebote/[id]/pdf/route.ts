@@ -118,7 +118,7 @@ export const GET = withAuth<Context>(async (_req, userId, { params }) => {
 
     // ── Tabellenheader ────────────────────────────────────────────────────────
     y -= 20;
-    page.drawRectangle({ x: 40, y: y - 6, width: 515, height: 20, color: C_DARK });
+    page.drawRectangle({ x: 40, y: y - 8, width: 515, height: 24, color: C_DARK });
     const cols = { desc: 48, menge: 340, einheit: 385, ep: 430, ges: 500 };
     [
       ["Beschreibung", cols.desc],
@@ -136,41 +136,60 @@ export const GET = withAuth<Context>(async (_req, userId, { params }) => {
     let posNr = 1;
     for (const item of items) {
       const bg = posNr % 2 === 0 ? C_LIGHT : C_WHITE;
-      page.drawRectangle({ x: 40, y: y - 5, width: 515, height: 18, color: bg });
+      page.drawRectangle({ x: 40, y: y - 5, width: 515, height: 22, color: bg });
       page.drawText(String(item.description || "").substring(0, 58), { x: cols.desc, y, size: 8, font: reg, color: C_DARK });
       page.drawText(String(item.quantity ?? ""), { x: cols.menge, y, size: 8, font: reg, color: C_DARK });
       page.drawText(String(item.unit || ""), { x: cols.einheit, y, size: 8, font: reg, color: C_DARK });
       page.drawText(fEur(item.unitPrice ?? 0), { x: cols.ep, y, size: 8, font: reg, color: C_DARK });
       page.drawText(fEur(item.total ?? 0), { x: cols.ges, y, size: 8, font: bold, color: C_DARK });
       posNr++;
-      y -= 18;
-      if (y < 160) { y = 160; break; }
+      y -= 22;
+      if (y < 195) { y = 195; break; }
     }
 
     // ── Trennlinie + Summen ───────────────────────────────────────────────────
     y -= 8;
     page.drawLine({ start: { x: 40, y }, end: { x: width - 40, y }, thickness: 0.75, color: C_BORDER });
     y -= 16;
+    const taxRate = a.taxRate ?? 19;
     const brutto = a.total || 0;
-    const netto  = brutto / 1.19;
+    const netto  = taxRate > 0 ? brutto / (1 + taxRate / 100) : brutto;
     const mwst   = brutto - netto;
 
-    const sumRows: [string, string, boolean][] = [
-      ["Nettobetrag:", fEur(netto), false],
-      ["zzgl. MwSt. 19 %:", fEur(mwst), false],
-    ];
-    for (const [label, val] of sumRows) {
-      page.drawText(label, { x: 380, y, size: 9, font: reg, color: C_MUTED });
-      page.drawText(val, { x: width - 40 - reg.widthOfTextAtSize(val, 9), y, size: 9, font: reg, color: C_DARK });
-      y -= 13;
+    if (taxRate === 0) {
+      // Kleinunternehmer
+      const nettoStr = fEur(netto);
+      page.drawText("Rechnungsbetrag (netto):", { x: 355, y, size: 9, font: reg, color: C_MUTED });
+      page.drawText(nettoStr, { x: width - 40 - reg.widthOfTextAtSize(nettoStr, 9), y, size: 9, font: reg, color: C_DARK });
+      y -= 14;
+      page.drawLine({ start: { x: 345, y: y + 5 }, end: { x: width - 40, y: y + 5 }, thickness: 1, color: C_ACCENT });
+      y -= 15;
+      page.drawRectangle({ x: 345, y: y - 7, width: 210, height: 26, color: C_DARK });
+      page.drawText("Gesamtbetrag:", { x: 353, y, size: 9, font: bold, color: C_WHITE });
+      const bruttoStr0 = fEur(netto);
+      page.drawText(bruttoStr0, { x: width - 40 - bold.widthOfTextAtSize(bruttoStr0, 12), y: y - 1, size: 12, font: bold, color: C_WHITE });
+      y -= 30;
+      page.drawRectangle({ x: 40, y: y - 8, width: 380, height: 24, color: C_LIGHT });
+      page.drawLine({ start: { x: 40, y: y - 8 }, end: { x: 40, y: y + 16 }, thickness: 2, color: C_ACCENT });
+      page.drawText("Gemäß §19 UStG wird keine Umsatzsteuer berechnet.", { x: 48, y: y + 2, size: 8, font: reg, color: C_DARK });
+    } else {
+      const sumRows: [string, string][] = [
+        ["Nettobetrag:", fEur(netto)],
+        [`zzgl. MwSt. ${taxRate} %:`, fEur(mwst)],
+      ];
+      for (const [label, val] of sumRows) {
+        page.drawText(label, { x: 355, y, size: 9, font: reg, color: C_MUTED });
+        page.drawText(val, { x: width - 40 - reg.widthOfTextAtSize(val, 9), y, size: 9, font: reg, color: C_DARK });
+        y -= 14;
+      }
+      page.drawLine({ start: { x: 345, y: y + 5 }, end: { x: width - 40, y: y + 5 }, thickness: 1, color: C_ACCENT });
+      y -= 15;
+      // Gesamtbetrag-Box
+      page.drawRectangle({ x: 345, y: y - 7, width: 210, height: 26, color: C_DARK });
+      page.drawText("Gesamtbetrag:", { x: 353, y, size: 9, font: bold, color: C_WHITE });
+      const bruttoStr = fEur(brutto);
+      page.drawText(bruttoStr, { x: width - 40 - bold.widthOfTextAtSize(bruttoStr, 12), y: y - 1, size: 12, font: bold, color: C_WHITE });
     }
-    page.drawLine({ start: { x: 360, y: y + 4 }, end: { x: width - 40, y: y + 4 }, thickness: 1, color: C_ACCENT });
-    y -= 14;
-    // Gesamtbetrag-Box
-    page.drawRectangle({ x: 360, y: y - 6, width: 195, height: 24, color: C_DARK });
-    page.drawText("Gesamtbetrag:", { x: 368, y, size: 9, font: bold, color: C_WHITE });
-    const bruttoStr = fEur(brutto);
-    page.drawText(bruttoStr, { x: width - 40 - bold.widthOfTextAtSize(bruttoStr, 11), y: y - 1, size: 11, font: bold, color: C_WHITE });
 
     // ── Versionshinweis ───────────────────────────────────────────────────────
     if (a.version && a.version > 1) {
@@ -202,16 +221,33 @@ export const GET = withAuth<Context>(async (_req, userId, { params }) => {
       } catch { /* Bild-Fehler ignorieren */ }
     }
 
+    // ── Angebots-Hinweis ─────────────────────────────────────────────────────
+    {
+      const ahY = Math.max(y - 18, 110);
+      const gueltigText = a.validUntil
+        ? "Dieses Angebot ist gültig bis " + fDate(a.validUntil) + ". Bei Rückfragen stehen wir Ihnen gerne zur Verfügung."
+        : "Wir freuen uns auf Ihren Auftrag. Bei Rückfragen stehen wir Ihnen gerne zur Verfügung.";
+      page.drawRectangle({ x: 40, y: ahY - 8, width: 390, height: 24, color: C_LIGHT });
+      page.drawLine({ start: { x: 40, y: ahY - 8 }, end: { x: 40, y: ahY + 16 }, thickness: 2.5, color: C_ACCENT });
+      page.drawText("Hinweis:", { x: 50, y: ahY + 6, size: 7.5, font: bold, color: C_DARK });
+      page.drawText(gueltigText.substring(0, 90), { x: 50, y: ahY - 2, size: 7, font: reg, color: C_DARK });
+    }
+
     // ── Footer ────────────────────────────────────────────────────────────────
-    const fy = 45;
-    page.drawLine({ start: { x: 40, y: fy + 18 }, end: { x: width - 40, y: fy + 18 }, thickness: 0.5, color: C_BORDER });
-    page.drawText("Angebot Nr. " + (a.number || ""), { x: 40, y: fy + 6, size: 7.5, font: reg, color: C_MUTED });
-    const pageRight = "Seite 1";
-    page.drawText(pageRight, { x: width - 40 - reg.widthOfTextAtSize(pageRight, 7.5), y: fy + 6, size: 7.5, font: reg, color: C_MUTED });
+    const fy = 42;
+    page.drawLine({ start: { x: 40, y: fy + 30 }, end: { x: width - 40, y: fy + 30 }, thickness: 0.5, color: C_BORDER });
+    const angebotKontakt = [company.companyEmail, company.companyPhone].filter(Boolean).join("  \u00B7  ");
+    if (angebotKontakt) page.drawText(angebotKontakt, { x: 40, y: fy + 19, size: 7.5, font: reg, color: C_MUTED });
+    const steuerA = company.companyTaxId ? "St.-Nr.: " + company.companyTaxId : "";
+    if (steuerA) page.drawText(steuerA, { x: 40, y: fy + 8, size: 7.5, font: reg, color: C_MUTED });
+    const anNumText = "Angebot Nr. " + (a.number || "");
+    page.drawText(anNumText, { x: width - 40 - reg.widthOfTextAtSize(anNumText, 7.5), y: fy + 19, size: 7.5, font: reg, color: C_MUTED });
+    const brandTextA = "Erstellt mit VoltOffice \u00B7 ElektroGenius \u00B7 Nördlinger Str. 1, 51103 Köln";
+    page.drawText(brandTextA, { x: width - 40 - reg.widthOfTextAtSize(brandTextA, 6.5), y: fy + 8, size: 6.5, font: reg, color: C_MUTED });
     if (a.locked) {
       const lockNote = "Dieses Dokument wurde digital unterschrieben und ist unveränderbar.";
       const noteW = reg.widthOfTextAtSize(lockNote, 7);
-      page.drawText(lockNote, { x: (width - noteW) / 2, y: fy - 8, size: 7, font: reg, color: C_MUTED });
+      page.drawText(lockNote, { x: (width - noteW) / 2, y: fy - 4, size: 7, font: reg, color: C_MUTED });
     }
 
     const pdfBytes = await pdfDoc.save();

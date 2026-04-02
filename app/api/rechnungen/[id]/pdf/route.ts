@@ -121,7 +121,7 @@ export const GET = withAuth<Context>(async (_req, userId, { params }) => {
 
     // ── Tabellenheader ────────────────────────────────────────────────────────
     y -= 6;
-    page.drawRectangle({ x: 40, y: y - 6, width: 515, height: 20, color: C_DARK });
+    page.drawRectangle({ x: 40, y: y - 8, width: 515, height: 24, color: C_DARK });
     const cols = { pos: 40, desc: 62, menge: 338, einheit: 380, ep: 428, ges: 500 };
     [
       ["Pos.", cols.pos + 2],
@@ -148,7 +148,7 @@ export const GET = withAuth<Context>(async (_req, userId, { params }) => {
       const typ    = item.typ || "";
 
       const bg = posNr % 2 === 0 ? C_LIGHT : C_WHITE;
-      page.drawRectangle({ x: 40, y: y - 5, width: 515, height: 18, color: bg });
+      page.drawRectangle({ x: 40, y: y - 5, width: 515, height: 22, color: bg });
       page.drawText(String(posNr), { x: cols.pos + 2, y, size: 8, font: reg, color: C_MUTED });
       page.drawText(desc, { x: cols.desc, y, size: 8, font: reg, color: C_DARK });
       page.drawText(String(menge), { x: cols.menge, y, size: 8, font: reg, color: C_DARK });
@@ -158,8 +158,8 @@ export const GET = withAuth<Context>(async (_req, userId, { params }) => {
 
       if (typ === "lohn" || einheit === "Std." || einheit === "AW") lohnNetto += ges;
       posNr++;
-      y -= 18;
-      if (y < 160) { y = 160; break; }
+      y -= 22;
+      if (y < 195) { y = 195; break; }
     }
 
     // ── Summenblock ───────────────────────────────────────────────────────────
@@ -174,15 +174,15 @@ export const GET = withAuth<Context>(async (_req, userId, { params }) => {
     if (taxRate === 0) {
       // Kleinunternehmer — nur Nettobetrag
       const nettoStr = fEur(netto);
-      page.drawText("Rechnungsbetrag (netto):", { x: 380, y, size: 9, font: reg, color: C_MUTED });
+      page.drawText("Rechnungsbetrag (netto):", { x: 355, y, size: 9, font: reg, color: C_MUTED });
       page.drawText(nettoStr, { x: width - 40 - reg.widthOfTextAtSize(nettoStr, 9), y, size: 9, font: reg, color: C_DARK });
-      y -= 13;
-      page.drawLine({ start: { x: 360, y: y + 4 }, end: { x: width - 40, y: y + 4 }, thickness: 1, color: C_ACCENT });
       y -= 14;
-      page.drawRectangle({ x: 360, y: y - 6, width: 195, height: 24, color: C_DARK });
-      page.drawText("Gesamtbetrag:", { x: 368, y, size: 9, font: bold, color: C_WHITE });
+      page.drawLine({ start: { x: 345, y: y + 5 }, end: { x: width - 40, y: y + 5 }, thickness: 1, color: C_ACCENT });
+      y -= 15;
+      page.drawRectangle({ x: 345, y: y - 7, width: 210, height: 26, color: C_DARK });
+      page.drawText("Gesamtbetrag:", { x: 353, y, size: 9, font: bold, color: C_WHITE });
       const bruttoStr = fEur(netto);
-      page.drawText(bruttoStr, { x: width - 40 - bold.widthOfTextAtSize(bruttoStr, 11), y: y - 1, size: 11, font: bold, color: C_WHITE });
+      page.drawText(bruttoStr, { x: width - 40 - bold.widthOfTextAtSize(bruttoStr, 12), y: y - 1, size: 12, font: bold, color: C_WHITE });
       // §19 UStG Hinweis
       y -= 30;
       page.drawRectangle({ x: 40, y: y - 8, width: 380, height: 24, color: C_LIGHT });
@@ -194,16 +194,16 @@ export const GET = withAuth<Context>(async (_req, userId, { params }) => {
         [`zzgl. MwSt. ${taxRate} %:`, fEur(mwst)],
       ];
       for (const [label, val] of sumRows) {
-        page.drawText(label, { x: 380, y, size: 9, font: reg, color: C_MUTED });
+        page.drawText(label, { x: 355, y, size: 9, font: reg, color: C_MUTED });
         page.drawText(val, { x: width - 40 - reg.widthOfTextAtSize(val, 9), y, size: 9, font: reg, color: C_DARK });
-        y -= 13;
+        y -= 14;
       }
-      page.drawLine({ start: { x: 360, y: y + 4 }, end: { x: width - 40, y: y + 4 }, thickness: 1, color: C_ACCENT });
-      y -= 14;
-      page.drawRectangle({ x: 360, y: y - 6, width: 195, height: 24, color: C_DARK });
-      page.drawText("Gesamtbetrag brutto:", { x: 368, y, size: 9, font: bold, color: C_WHITE });
+      page.drawLine({ start: { x: 345, y: y + 5 }, end: { x: width - 40, y: y + 5 }, thickness: 1, color: C_ACCENT });
+      y -= 15;
+      page.drawRectangle({ x: 345, y: y - 7, width: 210, height: 26, color: C_DARK });
+      page.drawText("Gesamtbetrag brutto:", { x: 353, y, size: 9, font: bold, color: C_WHITE });
       const bruttoStr = fEur(brutto);
-      page.drawText(bruttoStr, { x: width - 40 - bold.widthOfTextAtSize(bruttoStr, 11), y: y - 1, size: 11, font: bold, color: C_WHITE });
+      page.drawText(bruttoStr, { x: width - 40 - bold.widthOfTextAtSize(bruttoStr, 12), y: y - 1, size: 12, font: bold, color: C_WHITE });
     }
 
     // ── § 35a EStG ────────────────────────────────────────────────────────────
@@ -244,22 +244,33 @@ export const GET = withAuth<Context>(async (_req, userId, { params }) => {
       } catch { /* Bild-Fehler ignorieren */ }
     }
 
+    // ── Zahlungsbedingungen ───────────────────────────────────────────────────
+    {
+      const zbY = Math.max(y - 18, 110);
+      const zbText = r.status === "bezahlt" && r.paidAt
+        ? "Bereits bezahlt am " + new Date(r.paidAt).toLocaleDateString("de-DE") + (r.paymentMethod === "stripe" ? " · Zahlungsart: Stripe" : "")
+        : "Bitte überweisen Sie den Rechnungsbetrag fristgerecht auf das unten genannte Konto. Zahlungsziel: " + (r.zahlungsziel || "14 Tage netto") + ".";
+      page.drawRectangle({ x: 40, y: zbY - 8, width: 390, height: 24, color: C_LIGHT });
+      page.drawLine({ start: { x: 40, y: zbY - 8 }, end: { x: 40, y: zbY + 16 }, thickness: 2.5, color: C_ACCENT });
+      page.drawText("Zahlungsbedingungen:", { x: 50, y: zbY + 6, size: 7.5, font: bold, color: C_DARK });
+      page.drawText(zbText.substring(0, 90), { x: 50, y: zbY - 2, size: 7, font: reg, color: C_DARK });
+    }
+
     // ── Footer ────────────────────────────────────────────────────────────────
-    const fy = 45;
-    page.drawLine({ start: { x: 40, y: fy + 22 }, end: { x: width - 40, y: fy + 22 }, thickness: 0.5, color: C_BORDER });
-    const bank = r.iban ? "IBAN: " + r.iban + (r.bic ? "  ·  BIC: " + r.bic : "") + (r.bank ? "  ·  Bank: " + r.bank : "") : "";
+    const fy = 42;
+    page.drawLine({ start: { x: 40, y: fy + 30 }, end: { x: width - 40, y: fy + 30 }, thickness: 0.5, color: C_BORDER });
+    const bank = r.iban ? "IBAN: " + r.iban + (r.bic ? "  \u00B7  BIC: " + r.bic : "") + (r.bank ? "  \u00B7  " + r.bank : "") : "";
     const steuer = r.steuernummer ? "St.-Nr.: " + r.steuernummer : "";
-    const zahlung = r.status === "bezahlt" && r.paidAt
-      ? "Bezahlt am: " + new Date(r.paidAt).toLocaleDateString("de-DE") + (r.paymentMethod === "stripe" ? " (Stripe)" : "")
-      : "Zahlungsziel: " + (r.zahlungsziel || "14 Tage netto");
-    if (bank) page.drawText(bank, { x: 40, y: fy + 10, size: 7.5, font: reg, color: C_MUTED });
-    page.drawText([steuer, zahlung].filter(Boolean).join("   \u00B7   "), { x: 40, y: fy, size: 7.5, font: reg, color: C_MUTED });
+    if (bank) page.drawText(bank, { x: 40, y: fy + 19, size: 7.5, font: reg, color: C_MUTED });
+    if (steuer) page.drawText(steuer, { x: 40, y: fy + 8, size: 7.5, font: reg, color: C_MUTED });
     const rnText = "Rechnung Nr. " + (r.number || "");
-    page.drawText(rnText, { x: width - 40 - reg.widthOfTextAtSize(rnText, 7.5), y: fy, size: 7.5, font: reg, color: C_MUTED });
+    page.drawText(rnText, { x: width - 40 - reg.widthOfTextAtSize(rnText, 7.5), y: fy + 19, size: 7.5, font: reg, color: C_MUTED });
+    const brandText = "Erstellt mit VoltOffice \u00B7 ElektroGenius \u00B7 Nördlinger Str. 1, 51103 Köln";
+    page.drawText(brandText, { x: width - 40 - reg.widthOfTextAtSize(brandText, 6.5), y: fy + 8, size: 6.5, font: reg, color: C_MUTED });
     if (r.locked) {
       const lockNote = "Dieses Dokument wurde digital unterschrieben und ist unveränderbar.";
       const noteW = reg.widthOfTextAtSize(lockNote, 7);
-      page.drawText(lockNote, { x: (width - noteW) / 2, y: fy - 10, size: 7, font: reg, color: C_MUTED });
+      page.drawText(lockNote, { x: (width - noteW) / 2, y: fy - 4, size: 7, font: reg, color: C_MUTED });
     }
 
     const pdfBytes = await pdfDoc.save();
