@@ -24,7 +24,7 @@ const proFeatures = [
 
 export default function UpgradePage() {
   const { user } = useAuth();
-  const { isPro } = usePro();
+  const { tier, trialDaysLeft } = usePro();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -97,7 +97,7 @@ export default function UpgradePage() {
             <span className="text-sm mb-2" style={{ color: "#8b9ab5" }}>/Monat</span>
           </div>
           <p className="text-xs mb-6" style={{ color: "#8b9ab5" }}>
-            Monatlich kündbar · keine Bindung · sofort aktiv
+            14 Tage kostenlos testen · danach 9,99€/Monat · jederzeit kündbar
           </p>
 
           {/* Features */}
@@ -116,28 +116,46 @@ export default function UpgradePage() {
           </ul>
 
           {/* CTA */}
-          {isPro ? (
+          {tier === "pro" ? (
             <div
               className="w-full py-3 rounded-xl text-center text-sm font-semibold"
               style={{ background: "rgba(63,185,80,0.15)", color: "#3fb950", border: "1px solid rgba(63,185,80,0.3)" }}
             >
               <Check size={15} className="inline mr-1.5" />Du hast bereits Pro aktiv
             </div>
+          ) : tier === "trial" ? (
+            <>
+              <div className="flex items-center justify-center gap-2 mb-3 px-3 py-2 rounded-xl text-xs font-medium"
+                style={{ background: "rgba(245,166,35,0.12)", border: "1px solid rgba(245,166,35,0.3)", color: "#f5a623" }}>
+                <Clock size={13} />
+                Testphase aktiv — noch {trialDaysLeft} {trialDaysLeft === 1 ? "Tag" : "Tage"} kostenlos
+              </div>
+              <button
+                onClick={handleUpgrade}
+                disabled={loading}
+                className="w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all hover:opacity-90 disabled:opacity-60"
+                style={{ background: "linear-gradient(135deg, #f5a623, #c4841c)", color: "#0d1b2e" }}
+              >
+                {loading ? <span>Wird geladen...</span> : <><Zap size={16} />Pro jetzt kaufen <ArrowRight size={16} /></>}
+              </button>
+              <p className="text-xs text-center mt-2" style={{ color: "#4a6fa5" }}>
+                14 Tage kostenlos testen – danach 9,99€/Monat
+              </p>
+            </>
           ) : (
-            <button
-              onClick={handleUpgrade}
-              disabled={loading}
-              className="w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all hover:opacity-90 disabled:opacity-60"
-              style={{ background: "linear-gradient(135deg, #f5a623, #c4841c)", color: "#0d1b2e" }}
-            >
-              {loading ? (
-                <span>Wird geladen...</span>
-              ) : (
-                <>
-                  Jetzt upgraden <ArrowRight size={16} />
-                </>
-              )}
-            </button>
+            <>
+              <button
+                onClick={handleUpgrade}
+                disabled={loading}
+                className="w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all hover:opacity-90 disabled:opacity-60"
+                style={{ background: "linear-gradient(135deg, #f5a623, #c4841c)", color: "#0d1b2e" }}
+              >
+                {loading ? <span>Wird geladen...</span> : <><Zap size={16} />Kostenlos testen <ArrowRight size={16} /></>}
+              </button>
+              <p className="text-xs text-center mt-2" style={{ color: "#4a6fa5" }}>
+                14 Tage kostenlos testen – danach 9,99€/Monat
+              </p>
+            </>
           )}
 
           {error && (
