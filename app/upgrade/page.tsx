@@ -121,7 +121,7 @@ export default function UpgradePage() {
               className="w-full py-3 rounded-xl text-center text-sm font-semibold"
               style={{ background: "rgba(63,185,80,0.15)", color: "#3fb950", border: "1px solid rgba(63,185,80,0.3)" }}
             >
-              ✓ Du hast bereits Pro aktiv
+              <Check size={15} className="inline mr-1.5" />Du hast bereits Pro aktiv
             </div>
           ) : (
             <button

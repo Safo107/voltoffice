@@ -175,7 +175,7 @@ export default function WorkdayProgressWidget() {
           <Clock size={12} />
           {beforeWork && "Noch nicht gestartet"}
           {!beforeWork && !afterWork && `Noch ${formatDuration(remaining)} verbleibend`}
-          {afterWork && <span style={{ color: "#22c55e" }}>Arbeitstag beendet ✓</span>}
+          {afterWork && <span className="flex items-center gap-1" style={{ color: "#22c55e" }}>Arbeitstag beendet <Check size={12} /></span>}
         </div>
         <span className="text-xs" style={{ color: "#4a5568" }}>
           {formatDuration(worked)} / {formatDuration(netMin)} Netto

@@ -6,7 +6,7 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 import Modal from "@/components/ui/Modal";
 import EmptyState from "@/components/ui/EmptyState";
 import { usePro } from "@/context/ProContext";
-import { Briefcase, Plus, Search, MoreVertical, Calendar, User, AlertCircle, Trash2, Edit } from "lucide-react";
+import { Briefcase, Plus, Search, MoreVertical, Calendar, User, AlertCircle, Trash2, Edit, Home, Building2, Factory } from "lucide-react";
 import SkeletonCard from "@/components/ui/SkeletonCard";
 
 interface Project {
@@ -256,17 +256,17 @@ export default function ProjektePage() {
                 {[
                   {
                     label: "EFH Standard",
-                    icon: "🏠",
+                    icon: <Home size={18} />,
                     data: { title: "EFH Neuinstallation", description: "Elektroinstallation Einfamilienhaus nach VDE 0100-520, 3-phasig 400V" },
                   },
                   {
                     label: "Wohnanlage",
-                    icon: "🏢",
+                    icon: <Building2 size={18} />,
                     data: { title: "Wohnanlage", description: "Mehrfamilienhaus Neuinstallation, inkl. PV-Vorbereitung und E-Mobilität" },
                   },
                   {
                     label: "Industrie",
-                    icon: "⚙️",
+                    icon: <Factory size={18} />,
                     data: { title: "Industrieanlage", description: "Industrieinstallation, Schaltschrankbau nach VDE 0100-700, Steuertechnik" },
                   },
                 ].map((t) => (
@@ -274,12 +274,12 @@ export default function ProjektePage() {
                     key={t.label}
                     type="button"
                     onClick={() => setForm((f) => ({ ...f, ...t.data }))}
-                    className="flex flex-col items-center gap-1 py-2.5 px-2 rounded-xl text-xs font-medium transition-all"
+                    className="flex flex-col items-center gap-1.5 py-2.5 px-2 rounded-xl text-xs font-medium transition-all"
                     style={{ background: "#0d1b2e", border: "1px solid #1e3a5f", color: "#8b9ab5" }}
                     onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#00c6ff44"; e.currentTarget.style.color = "#00c6ff"; }}
                     onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#1e3a5f"; e.currentTarget.style.color = "#8b9ab5"; }}
                   >
-                    <span className="text-lg">{t.icon}</span>
+                    {t.icon}
                     {t.label}
                   </button>
                 ))}

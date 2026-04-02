@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Zap, Mail, Lock, Eye, EyeOff, Globe, AlertCircle, CheckCircle, User } from "lucide-react";
+import { Zap, Mail, Lock, Eye, EyeOff, Globe, AlertCircle, CheckCircle, User, ArrowLeft } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
 type Mode = "login" | "register" | "reset";
@@ -340,7 +340,7 @@ export default function AuthPage() {
             {mode === "reset" && (
               <p style={{ color: "#8b9ab5" }}>
                 <button onClick={() => switchMode("login")} className="font-semibold hover:opacity-70 transition-opacity" style={{ color: "#00c6ff" }}>
-                  ← Zurück zur Anmeldung
+                  <ArrowLeft size={13} className="inline mr-1" />Zurück zur Anmeldung
                 </button>
               </p>
             )}

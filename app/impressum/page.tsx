@@ -93,7 +93,7 @@ export default function ImpressumPage() {
         </section>
 
         <div className="flex items-center gap-4 pt-4 text-xs" style={{ color: "#4a5568", borderTop: "1px solid #1e3a5f" }}>
-          <Link href="/" className="transition-colors hover:text-[#8b9ab5]">← Zurück zur App</Link>
+          <Link href="/" className="flex items-center gap-1 transition-colors hover:text-[#8b9ab5]"><ArrowLeft size={13} />Zurück zur App</Link>
           <span>·</span>
           <Link href="/datenschutz" className="transition-colors hover:text-[#8b9ab5]">Datenschutzerklärung</Link>
         </div>

@@ -6,7 +6,7 @@ import { usePro } from "@/context/ProContext";
 import { useRouter } from "next/navigation";
 import {
   Zap, Lock, Loader, AlertTriangle, CheckCircle, Wrench,
-  ThumbsUp, ChevronDown,
+  ThumbsUp, ChevronDown, Check, X, ChevronRight,
 } from "lucide-react";
 import {
   CROSS_SECTIONS, LS_NORMEN, HAEUFUNG_FAKTOREN,
@@ -124,7 +124,7 @@ function MagicFixBtn({ text, onClick }: { text: string; onClick: () => void }) {
       className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-bold transition-all hover:opacity-90"
       style={{ background: "linear-gradient(135deg,#f5a623,#c4841c)", color: "#0d1b2e", minHeight: 48 }}
     >
-      <Wrench size={16} /> ⚡ Auto-Fix: {text}
+      <Wrench size={16} /><Zap size={14} /> Auto-Fix: {text}
     </button>
   );
 }
@@ -399,14 +399,16 @@ export default function VdeRechnerPage() {
                   ? <CheckCircle size={16} style={{ color: "#22c55e" }} />
                   : <AlertTriangle size={16} style={{ color: "#ef4444" }} />}
                 <p className="text-sm font-bold" style={{ color: lsResult.ok ? "#22c55e" : "#ef4444", fontFamily: "var(--font-syne)" }}>
-                  {lsResult.ok ? "VDE-Bedingung erfüllt ✓" : "VDE-Bedingung verletzt!"}
+                  {lsResult.ok ? "VDE-Bedingung erfüllt" : "VDE-Bedingung verletzt!"}
                 </p>
               </div>
               <p className="text-xs font-mono" style={{ color: "#8b9ab5" }}>
                 Ib ({lsResult.ib.toFixed(1)} A) ≤ In ({inNenn} A) ≤ Iz ({lsResult.iz.toFixed(1)} A)
               </p>
-              <p className="text-xs mt-1" style={{ color: "#4a6fa5" }}>
-                Ib ≤ In: {lsResult.ib <= inNenn ? "✓" : "✗"}  |  In ≤ Iz: {inNenn <= lsResult.iz ? "✓" : "✗"}
+              <p className="text-xs mt-1 flex items-center gap-2" style={{ color: "#4a6fa5" }}>
+                <span className="flex items-center gap-1">Ib ≤ In: {lsResult.ib <= inNenn ? <Check size={11} style={{ color: "#22c55e" }} /> : <X size={11} style={{ color: "#ef4444" }} />}</span>
+                <span>|</span>
+                <span className="flex items-center gap-1">In ≤ Iz: {inNenn <= lsResult.iz ? <Check size={11} style={{ color: "#22c55e" }} /> : <X size={11} style={{ color: "#ef4444" }} />}</span>
               </p>
             </div>
 
@@ -499,7 +501,7 @@ export default function VdeRechnerPage() {
                   ? <CheckCircle size={16} style={{ color: "#22c55e" }} />
                   : <AlertTriangle size={16} style={{ color: "#ef4444" }} />}
                 <p className="text-sm font-bold" style={{ color: sfResult.ok ? "#22c55e" : "#ef4444" }}>
-                  {sfResult.ok ? `ΔU ≤ ${sfGrenzwert}% — Norm erfüllt ✓` : `ΔU > ${sfGrenzwert}% — Grenzwert überschritten!`}
+                  {sfResult.ok ? `ΔU ≤ ${sfGrenzwert}% — Norm erfüllt` : `ΔU > ${sfGrenzwert}% — Grenzwert überschritten!`}
                 </p>
               </div>
               <p className="text-xs" style={{ color: "#4a6fa5" }}>
@@ -623,7 +625,7 @@ export default function VdeRechnerPage() {
                   : <AlertTriangle size={16} style={{ color: "#ef4444" }} />}
                 <p className="text-sm font-bold" style={{ color: kkResult.ikMax <= kkIcn ? "#22c55e" : "#ef4444" }}>
                   {kkResult.ikMax <= kkIcn
-                    ? `LS-Schalter ${kkIcn} kA geeignet ✓`
+                    ? `LS-Schalter ${kkIcn} kA geeignet`
                     : `LS-Schalter ${kkIcn} kA NICHT ausreichend!`}
                 </p>
               </div>
@@ -632,7 +634,7 @@ export default function VdeRechnerPage() {
               </p>
               {kkResult.ikMax > kkIcn && (
                 <p className="text-xs mt-2" style={{ color: "#ef4444" }}>
-                  → LS-Schalter mit Icn ≥ {Math.ceil(kkResult.ikMax)} kA verwenden
+                  <ChevronRight size={12} className="inline mr-0.5" />LS-Schalter mit Icn ≥ {Math.ceil(kkResult.ikMax)} kA verwenden
                 </p>
               )}
             </div>
@@ -712,7 +714,7 @@ export default function VdeRechnerPage() {
                   ? <CheckCircle size={16} style={{ color: "#22c55e" }} />
                   : <AlertTriangle size={16} style={{ color: "#ef4444" }} />}
                 <p className="text-sm font-bold" style={{ color: abResult.ok ? "#22c55e" : "#ef4444" }}>
-                  {abResult.ok ? "Abschaltbedingung erfüllt ✓" : "Abschaltbedingung NICHT erfüllt!"}
+                  {abResult.ok ? "Abschaltbedingung erfüllt" : "Abschaltbedingung NICHT erfüllt!"}
                 </p>
               </div>
               <p className="text-xs font-mono" style={{ color: "#8b9ab5" }}>
@@ -721,9 +723,9 @@ export default function VdeRechnerPage() {
               {!abResult.ok && (
                 <div className="mt-3 space-y-2">
                   <p className="text-xs" style={{ color: "#f5a623" }}>Maßnahmen:</p>
-                  <p className="text-xs" style={{ color: "#8b9ab5" }}>→ Querschnitt erhöhen (senkt Zs)</p>
-                  <p className="text-xs" style={{ color: "#8b9ab5" }}>→ Leitungslänge reduzieren</p>
-                  {lsTyp === "C" && <p className="text-xs" style={{ color: "#8b9ab5" }}>→ LS-Typ B statt C verwenden (Ia halbiert sich)</p>}
+                  <p className="text-xs flex items-center gap-1" style={{ color: "#8b9ab5" }}><ChevronRight size={12} />Querschnitt erhöhen (senkt Zs)</p>
+                  <p className="text-xs flex items-center gap-1" style={{ color: "#8b9ab5" }}><ChevronRight size={12} />Leitungslänge reduzieren</p>
+                  {lsTyp === "C" && <p className="text-xs flex items-center gap-1" style={{ color: "#8b9ab5" }}><ChevronRight size={12} />LS-Typ B statt C verwenden (Ia halbiert sich)</p>}
                 </div>
               )}
             </div>

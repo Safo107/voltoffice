@@ -6,7 +6,7 @@ import Modal from "@/components/ui/Modal";
 import EmptyState from "@/components/ui/EmptyState";
 import { useRouter } from "next/navigation";
 import { usePro } from "@/context/ProContext";
-import { Receipt, Plus, Search, MoreVertical, Trash2, Edit, Loader, FileDown, Lock, Zap, ChevronDown } from "lucide-react";
+import { Receipt, Plus, Search, MoreVertical, Trash2, Edit, Loader, FileDown, Lock, Zap, ChevronDown, X, CornerDownLeft, ChevronRight } from "lucide-react";
 
 type Abrechnungsart = "festpreis" | "regie";
 
@@ -399,7 +399,7 @@ export default function RechnungenPage() {
                           className="px-2 py-1 rounded-lg text-xs"
                           style={{ background: "#00c6ff18", color: "#00c6ff", border: "1px solid #00c6ff33" }}
                           title="Beschreibung automatisch ausfüllen"
-                        >↩ Beschr.</button>
+                        ><CornerDownLeft size={12} className="inline mr-1" />Beschr.</button>
                       </div>
                     )}
                     {/* Zeile 3: Menge + Einheit + EP + Gesamt + Löschen */}
@@ -415,7 +415,7 @@ export default function RechnungenPage() {
                       <div className="text-xs font-bold px-2 py-1.5 rounded-lg whitespace-nowrap" style={{ background: "#112240", color: "#00c6ff", border: "1px solid #1e3a5f", minWidth: 56 }}>
                         {(item.gesamt ?? 0).toFixed(2)} €
                       </div>
-                      <button onClick={() => setItems((p) => p.filter((_, i) => i !== idx))} className="px-2 py-1.5 rounded-lg text-xs" style={{ color: "#ef4444", border: "1px solid #ef444433", background: "#ef444411" }}>✕</button>
+                      <button onClick={() => setItems((p) => p.filter((_, i) => i !== idx))} className="flex items-center justify-center px-2 py-1.5 rounded-lg" style={{ color: "#ef4444", border: "1px solid #ef444433", background: "#ef444411" }}><X size={13} /></button>
                     </div>
                   </div>
                 ))}
@@ -426,8 +426,8 @@ export default function RechnungenPage() {
               </div>
             </div>
 
-            <button onClick={() => setTab("footer")} className="w-full py-2 rounded-xl text-xs font-medium" style={{ background: "#112240", color: "#8b9ab5", border: "1px solid #1e3a5f" }}>
-              Weiter: Footer & Firmendaten →
+            <button onClick={() => setTab("footer")} className="w-full py-2 rounded-xl text-xs font-medium flex items-center justify-center gap-1.5" style={{ background: "#112240", color: "#8b9ab5", border: "1px solid #1e3a5f" }}>
+              Weiter: Footer &amp; Firmendaten <ChevronRight size={14} />
             </button>
           </div>
         )}

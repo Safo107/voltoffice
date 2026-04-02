@@ -58,8 +58,8 @@ export default function DashboardLayout({ children, title, subtitle }: Dashboard
               <Zap size={14} style={{ color: trialUrgent ? "#ef4444" : "#00c6ff", flexShrink: 0 }} />
               <span style={{ color: trialUrgent ? "#ef4444" : "#00c6ff", fontWeight: 600 }}>
                 {trialDaysLeft === 0
-                  ? "⚡ Dein Trial endet heute!"
-                  : `⚡ Noch ${trialDaysLeft} Trial-${trialDaysLeft === 1 ? "Tag" : "Tage"} — Danach Free-Plan (max. 5 Kunden, 3 Angebote)`}
+                  ? "Dein Trial endet heute!"
+                  : `Noch ${trialDaysLeft} Trial-${trialDaysLeft === 1 ? "Tag" : "Tage"} — Danach Free-Plan (max. 5 Kunden, 3 Angebote)`}
               </span>
             </div>
             <div className="flex items-center gap-2 shrink-0">
