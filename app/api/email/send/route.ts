@@ -29,7 +29,7 @@ export const POST = withAuth(async (req: NextRequest, userId) => {
     const company = await getCompanyData(userId);
 
     // PDF intern abrufen — Auth-Header weiterleiten
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://voltoffice.elektrogenius.de";
     const pdfPath = type === "angebot"
       ? `/api/angebote/${documentId}/pdf`
       : `/api/rechnungen/${documentId}/pdf`;
