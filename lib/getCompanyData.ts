@@ -10,6 +10,7 @@ export interface CompanyData {
   companyWebsite: string;
   taxNumber: string;
   vatId: string;
+  companyTaxId: string;
   companyLogoBase64: string | null;
 }
 
@@ -27,13 +28,14 @@ export async function getCompanyData(userId: string): Promise<CompanyData> {
       companyWebsite:    user?.companyWebsite     || "",
       taxNumber:         user?.taxNumber          || "",
       vatId:             user?.vatId              || "",
+      companyTaxId:      user?.taxNumber          || user?.vatId || "",
       companyLogoBase64: user?.companyLogoBase64  || null,
     };
   } catch {
     return {
       companyName: "", companyAddress: "", companyZip: "", companyCity: "",
       companyPhone: "", companyEmail: "", companyWebsite: "",
-      taxNumber: "", vatId: "", companyLogoBase64: null,
+      taxNumber: "", vatId: "", companyTaxId: "", companyLogoBase64: null,
     };
   }
 }
