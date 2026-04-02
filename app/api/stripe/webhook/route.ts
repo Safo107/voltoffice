@@ -71,11 +71,34 @@ export async function POST(req: NextRequest) {
       const subscription = event.data.object as Stripe.Subscription;
       const uid = subscription.metadata?.uid;
       const isActive = subscription.status === "active";
+      // past_due / unpaid → Gnadenfrist, noch nicht downgraden
+      const shouldDowngrade = ["canceled", "incomplete_expired", "unpaid"].includes(subscription.status);
       if (uid) {
         await db.collection("users").updateOne(
           { uid },
-          { $set: { pro: isActive, subscriptionTier: isActive ? "pro" : "free" } }
+          {
+            $set: {
+              pro: isActive,
+              subscriptionTier: isActive ? "pro" : (shouldDowngrade ? "free" : "pro"),
+              stripeSubscriptionStatus: subscription.status,
+            },
+          }
         );
+      }
+      break;
+    }
+
+    case "invoice.payment_failed": {
+      // Zahlung fehlgeschlagen – User bekommt E-Mail von Stripe automatisch
+      // Kein sofortiger Downgrade, Stripe versucht es erneut
+      const invoice = event.data.object as Stripe.Invoice & { customer?: string };
+      const customerId = typeof invoice.customer === "string" ? invoice.customer : null;
+      if (customerId) {
+        await db.collection("users").updateOne(
+          { stripeCustomerId: customerId },
+          { $set: { lastPaymentFailed: new Date().toISOString() } }
+        );
+        console.warn(`⚠️ Zahlung fehlgeschlagen für customer=${customerId}`);
       }
       break;
     }

@@ -14,12 +14,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "uid und email erforderlich" }, { status: 400 });
     }
 
-    const priceId = process.env.STRIPE_PRICE_ID;
+    // Fallback auf die konfigurierte Preis-ID wenn Env-Var nicht gesetzt
+    const priceId = process.env.STRIPE_PRICE_ID || "price_1THakKEktxCnIq0C0Gz5DLKT";
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://voltoffice.elektrogenius.de";
-
-    if (!priceId) {
-      return NextResponse.json({ error: "STRIPE_PRICE_ID nicht konfiguriert" }, { status: 500 });
-    }
 
     const db = await getDb();
     const userDoc = await db.collection("users").findOne({ uid });
