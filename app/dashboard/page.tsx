@@ -55,26 +55,29 @@ function OmniSearch({ open, onClose }: { open: boolean; onClose: () => void }) {
     if (!query.trim()) { setResults([]); return; }
     const q = query.toLowerCase();
     setLoading(true);
-    Promise.all([
-      authFetch("/api/projekte").then(r => r.json()).catch(() => []),
-      authFetch("/api/kunden").then(r => r.json()).catch(() => []),
-      authFetch("/api/angebote").then(r => r.json()).catch(() => []),
-    ]).then(([projekte, kunden, angebote]) => {
-      const hits: typeof results = [];
-      (projekte as Projekt[]).forEach(p => {
-        if ((p.name || "").toLowerCase().includes(q) || (p.customerName || "").toLowerCase().includes(q))
-          hits.push({ type: "Projekt", label: p.name, sub: p.customerName || "", href: "/projekte" });
-      });
-      (kunden as Kunde[]).forEach(k => {
-        if ((k.name || "").toLowerCase().includes(q) || (k.email || "").toLowerCase().includes(q))
-          hits.push({ type: "Kunde", label: k.name, sub: k.email || "", href: "/kunden" });
-      });
-      (angebote as OpenOffer[]).forEach(a => {
-        if ((a.number || "").toLowerCase().includes(q) || (a.customerName || "").toLowerCase().includes(q))
-          hits.push({ type: "Angebot", label: `Angebot #${a.number}`, sub: a.customerName, href: "/angebote" });
-      });
-      setResults(hits.slice(0, 8));
-    }).finally(() => setLoading(false));
+    const timer = setTimeout(() => {
+      Promise.all([
+        authFetch("/api/projekte").then(r => r.json()).catch(() => []),
+        authFetch("/api/kunden").then(r => r.json()).catch(() => []),
+        authFetch("/api/angebote").then(r => r.json()).catch(() => []),
+      ]).then(([projekte, kunden, angebote]) => {
+        const hits: typeof results = [];
+        (projekte as Projekt[]).forEach(p => {
+          if ((p.name || "").toLowerCase().includes(q) || (p.customerName || "").toLowerCase().includes(q))
+            hits.push({ type: "Projekt", label: p.name, sub: p.customerName || "", href: "/projekte" });
+        });
+        (kunden as Kunde[]).forEach(k => {
+          if ((k.name || "").toLowerCase().includes(q) || (k.email || "").toLowerCase().includes(q))
+            hits.push({ type: "Kunde", label: k.name, sub: k.email || "", href: "/kunden" });
+        });
+        (angebote as OpenOffer[]).forEach(a => {
+          if ((a.number || "").toLowerCase().includes(q) || (a.customerName || "").toLowerCase().includes(q))
+            hits.push({ type: "Angebot", label: `Angebot #${a.number}`, sub: a.customerName, href: "/angebote" });
+        });
+        setResults(hits.slice(0, 8));
+      }).finally(() => setLoading(false));
+    }, 300);
+    return () => clearTimeout(timer);
   }, [query]);
 
   const typeColor: Record<string, string> = {

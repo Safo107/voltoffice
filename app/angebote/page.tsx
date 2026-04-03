@@ -11,6 +11,7 @@ import SignaturePad from "@/components/ui/SignaturePad";
 import EmptyState from "@/components/ui/EmptyState";
 import UpgradeModal from "@/components/ui/UpgradeModal";
 import PlanLimitBar from "@/components/ui/PlanLimitBar";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 import { useRouter } from "next/navigation";
 import {
   FileText, Plus, Search, MoreVertical, Trash2, Edit, Loader, Send, FolderPlus, FileDown, X, PenLine, Lock, GitBranch, Mail,
@@ -77,6 +78,10 @@ export default function AngebotePage() {
   const [emailSubject, setEmailSubject] = useState("");
   const [emailMessage, setEmailMessage] = useState("");
   const [emailSending, setEmailSending] = useState(false);
+  const [actionError, setActionError] = useState("");
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [confirmConvertId, setConfirmConvertId] = useState<Offer | null>(null);
+  const [confirmVersionId, setConfirmVersionId] = useState<Offer | null>(null);
 
   useEffect(() => { fetchAngebote(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -86,11 +91,10 @@ export default function AngebotePage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url; a.download = `Angebot-${num}.pdf`;
-    a.click(); URL.revokeObjectURL(url);
+    try { a.click(); } finally { URL.revokeObjectURL(url); }
   };
 
   const handleConvertToProjekt = async (angebot: Offer) => {
-    if (!confirm(`Angebot ${angebot.number} in neues Projekt umwandeln?`)) return;
     try {
       const res = await authFetch("/api/projekte", {
         method: "POST",
@@ -104,7 +108,8 @@ export default function AngebotePage() {
         }),
       });
       if (res.ok) router.push("/projekte");
-    } catch { /* */ }
+    } catch { /* ignore */ }
+    setConfirmConvertId(null);
   };
 
   useEffect(() => {
@@ -203,14 +208,12 @@ export default function AngebotePage() {
     }
   };
 
-  const handleDelete = async (a: Offer) => {
-    if (!confirm(`Angebot #${a.number} wirklich löschen?`)) return;
+  const handleDelete = async (id: string) => {
     try {
-      await authFetch(`/api/angebote/${a._id}`, { method: "DELETE" });
+      await authFetch(`/api/angebote/${id}`, { method: "DELETE" });
       await fetchAngebote();
-    } catch {
-      //
-    }
+    } catch { /* ignore */ }
+    setConfirmDeleteId(null);
     setMenuOpen(null);
   };
 
@@ -233,7 +236,6 @@ export default function AngebotePage() {
   };
 
   const handleNewVersion = async (a: Offer) => {
-    if (!confirm(`Neue Version von Angebot #${a.number} erstellen? Das Original bleibt gesperrt.`)) return;
     try {
       const res = await authFetch("/api/documents/version", {
         method: "POST",
@@ -243,9 +245,10 @@ export default function AngebotePage() {
       const data = await res.json();
       if (res.ok) {
         await fetchAngebote();
-        alert(`Neue Version #${data.number} (v${data.version}) wurde erstellt.`);
+        setConfirmVersionId(null);
       } else {
-        alert(data.error || "Fehler beim Erstellen der neuen Version.");
+        setActionError(data.error || "Fehler beim Erstellen der neuen Version.");
+        setConfirmVersionId(null);
       }
     } catch { /* */ }
     setMenuOpen(null);
@@ -273,10 +276,10 @@ export default function AngebotePage() {
         await fetchAngebote();
         setEmailModal(null);
       } else {
-        alert(data.error || "E-Mail konnte nicht gesendet werden.");
+        setActionError(data.error || "E-Mail konnte nicht gesendet werden.");
       }
     } catch {
-      alert("Verbindungsfehler. Bitte erneut versuchen.");
+      setActionError("Verbindungsfehler. Bitte erneut versuchen.");
     } finally {
       setEmailSending(false);
     }
@@ -393,7 +396,7 @@ export default function AngebotePage() {
                   {angebot.locked ? "Gesperrt (unterschrieben)" : "Bearbeiten"}
                 </button>
                 {angebot.locked && (
-                  <button onClick={() => handleNewVersion(angebot)}
+                  <button onClick={() => { setConfirmVersionId(angebot); setMenuOpen(null); }}
                     className="flex items-center gap-2 w-full px-4 py-2 text-sm transition-all"
                     style={{ color: "#f5a623" }}
                     onMouseEnter={(e) => { e.currentTarget.style.background = "#f5a62318"; }}
@@ -416,7 +419,7 @@ export default function AngebotePage() {
                   <Mail size={13} />
                   {(angebot as { emailStatus?: string }).emailStatus === "sent" ? "Erneut senden" : "Per E-Mail senden"}
                 </button>
-                <button onClick={() => { handleConvertToProjekt(angebot); setMenuOpen(null); }}
+                <button onClick={() => { setConfirmConvertId(angebot); setMenuOpen(null); }}
                   className="flex items-center gap-2 w-full px-4 py-2 text-sm transition-all"
                   style={{ color: "#22c55e" }}
                   onMouseEnter={(e) => { e.currentTarget.style.background = "#22c55e18"; }}
@@ -431,7 +434,7 @@ export default function AngebotePage() {
                   <PenLine size={13} />
                   {angebot.signatureStatus === "signed" ? "Unterschrift anzeigen" : "Unterschreiben"}
                 </button>
-                <button onClick={() => { handleDelete(angebot); setMenuOpen(null); }}
+                <button onClick={() => { setConfirmDeleteId(String(angebot._id)); setMenuOpen(null); }}
                   className="flex items-center gap-2 w-full px-4 py-2 text-sm transition-all"
                   style={{ color: "#ef4444" }}
                   onMouseEnter={(e) => { e.currentTarget.style.background = "#ef444418"; }}
@@ -811,6 +814,45 @@ export default function AngebotePage() {
           />
         )}
       </Modal>
+
+      {/* Aktions-Fehler Banner */}
+      {actionError && (
+        <div
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-3 rounded-xl text-sm font-medium shadow-xl cursor-pointer"
+          style={{ background: "#ef444420", border: "1px solid #ef444440", color: "#ef4444", whiteSpace: "nowrap" }}
+          onClick={() => setActionError("")}
+        >
+          {actionError}
+        </div>
+      )}
+
+      <ConfirmModal
+        open={!!confirmDeleteId}
+        title="Angebot löschen?"
+        message="Dieses Angebot wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden."
+        confirmLabel="Löschen"
+        danger
+        onConfirm={() => confirmDeleteId && handleDelete(confirmDeleteId)}
+        onCancel={() => setConfirmDeleteId(null)}
+      />
+
+      <ConfirmModal
+        open={!!confirmConvertId}
+        title="In Projekt umwandeln?"
+        message={`Angebot ${confirmConvertId?.number} in ein neues Projekt umwandeln?`}
+        confirmLabel="Umwandeln"
+        onConfirm={() => confirmConvertId && handleConvertToProjekt(confirmConvertId)}
+        onCancel={() => setConfirmConvertId(null)}
+      />
+
+      <ConfirmModal
+        open={!!confirmVersionId}
+        title="Neue Version erstellen?"
+        message={`Neue Version von Angebot #${confirmVersionId?.number} erstellen? Das Original bleibt gesperrt.`}
+        confirmLabel="Neue Version erstellen"
+        onConfirm={() => confirmVersionId && handleNewVersion(confirmVersionId)}
+        onCancel={() => setConfirmVersionId(null)}
+      />
     </DashboardLayout>
   );
 }

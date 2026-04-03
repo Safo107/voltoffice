@@ -13,6 +13,7 @@ import UpgradeModal from "@/components/ui/UpgradeModal";
 import PlanLimitBar from "@/components/ui/PlanLimitBar";
 import { Briefcase, Plus, Search, MoreVertical, Calendar, User, Trash2, Edit, Home, Building2, Factory, Package, X, Check, Euro, TrendingUp, TrendingDown } from "lucide-react";
 import SkeletonCard from "@/components/ui/SkeletonCard";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 
 interface Project {
   _id?: string;
@@ -71,6 +72,7 @@ export default function ProjektePage() {
   const [gewinnProjekt, setGewinnProjekt] = useState<Project | null>(null);
   const [gewinnLoading, setGewinnLoading] = useState(false);
   const [gewinnData, setGewinnData] = useState<{ umsatz: number; zeitkosten: number; materialkosten: number } | null>(null);
+  const [confirmProjekt, setConfirmProjekt] = useState<Project | null>(null);
 
   useEffect(() => { fetchProjekte(); }, []);
 
@@ -221,15 +223,18 @@ export default function ProjektePage() {
     finally { setGewinnLoading(false); }
   };
 
-  const handleDelete = async (p: Project) => {
-    if (!confirm(`Projekt "${p.title}" wirklich löschen?`)) return;
-    try {
-      await authFetch(`/api/projekte/${p._id}`, { method: "DELETE" });
-      await fetchProjekte();
-    } catch {
-      //
-    }
+  const handleDelete = (p: Project) => {
+    setConfirmProjekt(p);
     setMenuOpen(null);
+  };
+
+  const confirmDelete = async () => {
+    if (!confirmProjekt) return;
+    try {
+      await authFetch(`/api/projekte/${confirmProjekt._id}`, { method: "DELETE" });
+      await fetchProjekte();
+    } catch { /* ignore */ }
+    setConfirmProjekt(null);
   };
 
   const filtered = projekte.filter(
@@ -640,6 +645,16 @@ export default function ProjektePage() {
           )}
         </div>
       </Modal>
+
+      <ConfirmModal
+        open={!!confirmProjekt}
+        title="Projekt löschen?"
+        message={`Projekt „${confirmProjekt?.title}" wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.`}
+        confirmLabel="Löschen"
+        danger
+        onConfirm={confirmDelete}
+        onCancel={() => setConfirmProjekt(null)}
+      />
     </DashboardLayout>
   );
 }

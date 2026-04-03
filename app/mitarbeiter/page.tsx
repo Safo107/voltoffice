@@ -8,6 +8,7 @@ import EmptyState from "@/components/ui/EmptyState";
 import { usePro } from "@/context/ProContext";
 import { useRouter } from "next/navigation";
 import { UserCheck, Plus, Search, MoreVertical, Trash2, Edit, Loader, Lock, Zap, Mail, Phone, Euro } from "lucide-react";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 
 const ROLLEN = ["Elektriker", "Geselle", "Meister", "Azubi", "Bauleiter", "Monteur", "Projektleiter", "Sonstige"];
 
@@ -35,6 +36,7 @@ export default function MitarbeiterPage() {
   const [form, setForm] = useState<Mitarbeiter>({ ...EMPTY });
   const [saving, setSaving] = useState(false);
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
+  const [confirmMaId, setConfirmMaId] = useState<string | null>(null);
 
   useEffect(() => { if (isPro) fetchListe(); }, [isPro]);
 
@@ -73,9 +75,9 @@ export default function MitarbeiterPage() {
   };
 
   const del = async (id: string) => {
-    if (!confirm("Mitarbeiter wirklich löschen?")) return;
     await authFetch(`/api/mitarbeiter/${id}`, { method: "DELETE" });
     fetchListe();
+    setConfirmMaId(null);
   };
 
   const filtered = liste.filter((m) =>
@@ -190,7 +192,7 @@ export default function MitarbeiterPage() {
                     <button onClick={() => { openEdit(m); setMenuOpen(null); }} className="flex items-center gap-2 w-full px-4 py-2 text-sm hover:bg-white/5" style={{ color: "#e6edf3" }}>
                       <Edit size={13} /> Bearbeiten
                     </button>
-                    <button onClick={() => { del(String(m._id)); setMenuOpen(null); }} className="flex items-center gap-2 w-full px-4 py-2 text-sm hover:bg-white/5" style={{ color: "#ef4444" }}>
+                    <button onClick={() => { setConfirmMaId(String(m._id)); setMenuOpen(null); }} className="flex items-center gap-2 w-full px-4 py-2 text-sm hover:bg-white/5" style={{ color: "#ef4444" }}>
                       <Trash2 size={13} /> Löschen
                     </button>
                   </div>
@@ -241,6 +243,16 @@ export default function MitarbeiterPage() {
           </div>
         </div>
       </Modal>
+
+      <ConfirmModal
+        open={!!confirmMaId}
+        title="Mitarbeiter löschen?"
+        message="Diesen Mitarbeiter wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden."
+        confirmLabel="Löschen"
+        danger
+        onConfirm={() => confirmMaId && del(confirmMaId)}
+        onCancel={() => setConfirmMaId(null)}
+      />
     </DashboardLayout>
   );
 }

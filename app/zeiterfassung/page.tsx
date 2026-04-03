@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { authFetch } from "@/lib/authFetch";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Modal from "@/components/ui/Modal";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 import { usePro } from "@/context/ProContext";
 import {
   Clock, Plus, Play, Square, Calendar, Briefcase, Loader, Trash2,
@@ -106,6 +107,7 @@ export default function ZeiterfassungPage() {
   const [invoiceStundensatz, setInvoiceStundensatz] = useState(65);
   const [invoiceKunde, setInvoiceKunde] = useState("");
   const [invoiceSaving, setInvoiceSaving] = useState(false);
+  const [confirmEntry, setConfirmEntry] = useState<TimeEntry | null>(null);
 
   useEffect(() => {
     fetchEntries();
@@ -247,11 +249,15 @@ export default function ZeiterfassungPage() {
   };
 
   const handleDelete = async (entry: TimeEntry) => {
-    if (!confirm("Eintrag löschen?")) return;
     try {
       await authFetch(`/api/zeiterfassung/${entry._id}`, { method: "DELETE" });
       await fetchEntries();
-    } catch { /* */ }
+    } catch { /* ignore */ }
+    setConfirmEntry(null);
+  };
+
+  const requestDelete = (entry: TimeEntry) => {
+    setConfirmEntry(entry);
   };
 
   const toggleSelect = (id: string) => {
@@ -666,7 +672,7 @@ export default function ZeiterfassungPage() {
                   </div>
                   {/* Delete */}
                   <div className="col-span-1 flex justify-end">
-                    <button onClick={() => handleDelete(entry)}
+                    <button onClick={() => requestDelete(entry)}
                       className="p-1.5 rounded-lg transition-all opacity-0 group-hover:opacity-100"
                       style={{ color: "#ef4444" }}
                       onMouseEnter={(e) => { e.currentTarget.style.background = "#ef444418"; }}
@@ -956,6 +962,16 @@ export default function ZeiterfassungPage() {
           </div>
         </div>
       </Modal>
+
+      <ConfirmModal
+        open={!!confirmEntry}
+        title="Eintrag löschen?"
+        message="Diesen Zeiteintrag wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden."
+        confirmLabel="Löschen"
+        danger
+        onConfirm={() => confirmEntry && handleDelete(confirmEntry)}
+        onCancel={() => setConfirmEntry(null)}
+      />
     </DashboardLayout>
   );
 }

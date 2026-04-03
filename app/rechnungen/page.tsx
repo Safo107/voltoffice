@@ -9,6 +9,7 @@ import EmptyState from "@/components/ui/EmptyState";
 import { useRouter } from "next/navigation";
 import { usePro } from "@/context/ProContext";
 import { Receipt, Plus, Search, MoreVertical, Trash2, Edit, Loader, FileDown, Lock, Zap, ChevronDown, X, CornerDownLeft, ChevronRight, PenLine, GitBranch, Mail } from "lucide-react";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 
 type Abrechnungsart = "festpreis" | "regie";
 
@@ -119,6 +120,10 @@ export default function RechnungenPage() {
   const [firmenOrt, setFirmenOrt] = useState("");
   const [items, setItems] = useState<InvoiceItem[]>([{ ...EMPTY_ITEM }]);
   const [taxRate, setTaxRate] = useState<0 | 7 | 19>(19);
+  const [saveError, setSaveError] = useState("");
+  const [actionError, setActionError] = useState("");
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [confirmVersionId, setConfirmVersionId] = useState<Invoice | null>(null);
 
   useEffect(() => { fetchRechnungen(); fetchProjekte(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -226,31 +231,31 @@ export default function RechnungenPage() {
       const url = editRechnung?._id
         ? `/api/rechnungen/${editRechnung._id}`
         : "/api/rechnungen";
-      const res = await fetch(url, {
+      const res = await authFetch(url, {
         method: editRechnung?._id ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        alert(err.error || "Speichern fehlgeschlagen. Bitte erneut versuchen.");
+        setSaveError(err.error || "Speichern fehlgeschlagen. Bitte erneut versuchen.");
         return;
       }
       setModalOpen(false);
+      setSaveError("");
       await fetchRechnungen();
     } catch {
-      alert("Verbindungsfehler. Bitte Internetverbindung prüfen.");
+      setSaveError("Verbindungsfehler. Bitte Internetverbindung prüfen.");
     } finally { setSaving(false); }
   };
 
   const deleteRechnung = async (id: string) => {
-    if (!confirm("Rechnung wirklich löschen?")) return;
     await authFetch(`/api/rechnungen/${id}`, { method: "DELETE" });
+    setConfirmDeleteId(null);
     fetchRechnungen();
   };
 
   const handleNewVersion = async (r: Invoice) => {
-    if (!confirm(`Neue Version von Rechnung #${r.number} erstellen? Das Original bleibt gesperrt.`)) return;
     try {
       const res = await authFetch("/api/documents/version", {
         method: "POST",
@@ -260,11 +265,12 @@ export default function RechnungenPage() {
       const data = await res.json();
       if (res.ok) {
         await fetchRechnungen();
-        alert(`Neue Version #${data.number} (v${data.version}) wurde erstellt.`);
+        setConfirmVersionId(null);
       } else {
-        alert(data.error || "Fehler beim Erstellen der neuen Version.");
+        setActionError(data.error || "Fehler beim Erstellen der neuen Version.");
+        setConfirmVersionId(null);
       }
-    } catch { /* */ }
+    } catch { /* ignore */ }
     setMenuOpen(null);
   };
 
@@ -290,10 +296,10 @@ export default function RechnungenPage() {
         await fetchRechnungen();
         setEmailModal(null);
       } else {
-        alert(data.error || "E-Mail konnte nicht gesendet werden.");
+        setActionError(data.error || "E-Mail konnte nicht gesendet werden.");
       }
     } catch {
-      alert("Verbindungsfehler. Bitte erneut versuchen.");
+      setActionError("Verbindungsfehler. Bitte erneut versuchen.");
     } finally {
       setEmailSending(false);
     }
@@ -334,28 +340,28 @@ export default function RechnungenPage() {
       if (data.url) {
         window.open(data.url, "_blank");
       } else {
-        alert(data.error || "Checkout-Fehler");
+        setActionError(data.error || "Checkout-Fehler");
       }
-    } catch { alert("Verbindungsfehler."); }
+    } catch { setActionError("Verbindungsfehler."); }
     setMenuOpen(null);
   };
 
   const downloadPdf = async (id: string, number: string) => {
     const res = await authFetch(`/api/rechnungen/${id}/pdf`);
-    if (!res.ok) return alert("PDF-Fehler");
+    if (!res.ok) { setActionError("PDF konnte nicht erstellt werden."); return; }
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = `Rechnung-${number}.pdf`; a.click();
-    URL.revokeObjectURL(url);
+    const a = document.createElement("a"); a.href = url; a.download = `Rechnung-${number}.pdf`;
+    try { a.click(); } finally { URL.revokeObjectURL(url); }
   };
 
   const downloadRapport = async (id: string, number: string) => {
     const res = await authFetch(`/api/rechnungen/${id}/rapport`);
-    if (!res.ok) return alert("Rapport-Fehler");
+    if (!res.ok) { setActionError("Rapport konnte nicht erstellt werden."); return; }
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = `Rapport-${number}.pdf`; a.click();
-    URL.revokeObjectURL(url);
+    const a = document.createElement("a"); a.href = url; a.download = `Rapport-${number}.pdf`;
+    try { a.click(); } finally { URL.revokeObjectURL(url); }
   };
 
   const filtered = rechnungen.filter((r) =>
@@ -451,7 +457,7 @@ export default function RechnungenPage() {
                         {r.locked ? "Gesperrt (unterschrieben)" : "Bearbeiten"}
                       </button>
                       {r.locked && (
-                        <button onClick={() => handleNewVersion(r)} className="flex items-center gap-2 w-full px-4 py-2 text-sm hover:bg-white/5" style={{ color: "#f5a623" }}>
+                        <button onClick={() => { setConfirmVersionId(r); setMenuOpen(null); }} className="flex items-center gap-2 w-full px-4 py-2 text-sm hover:bg-white/5" style={{ color: "#f5a623" }}>
                           <GitBranch size={13} /> Neue Version erstellen
                         </button>
                       )}
@@ -474,7 +480,7 @@ export default function RechnungenPage() {
                       <button onClick={() => { setSignModal(r); setMenuOpen(null); }} className="flex items-center gap-2 w-full px-4 py-2 text-sm hover:bg-white/5" style={{ color: r.signatureStatus === "signed" ? "#22c55e" : "#00c6ff" }}>
                         <PenLine size={13} /> {r.signatureStatus === "signed" ? "Unterschrift anzeigen" : "Unterschreiben"}
                       </button>
-                      <button onClick={() => { deleteRechnung(String(r._id)); setMenuOpen(null); }} className="flex items-center gap-2 w-full px-4 py-2 text-sm hover:bg-white/5" style={{ color: "#ef4444" }}><Trash2 size={13} /> Löschen</button>
+                      <button onClick={() => { setConfirmDeleteId(String(r._id)); setMenuOpen(null); }} className="flex items-center gap-2 w-full px-4 py-2 text-sm hover:bg-white/5" style={{ color: "#ef4444" }}><Trash2 size={13} /> Löschen</button>
                     </div>
                   )}
                 </div>
@@ -693,6 +699,7 @@ export default function RechnungenPage() {
             {saving ? "Speichern…" : editRechnung ? "Aktualisieren" : "Rechnung erstellen"}
           </button>
         </div>
+        {saveError && <p className="text-xs mt-2 text-center" style={{ color: "#ef4444" }}>{saveError}</p>}
       </Modal>
 
       {/* E-Mail Modal */}
@@ -795,6 +802,36 @@ export default function RechnungenPage() {
           />
         )}
       </Modal>
+
+      {/* Aktions-Fehler Banner */}
+      {actionError && (
+        <div
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-3 rounded-xl text-sm font-medium shadow-xl"
+          style={{ background: "#ef444420", border: "1px solid #ef444440", color: "#ef4444", whiteSpace: "nowrap" }}
+          onClick={() => setActionError("")}
+        >
+          {actionError}
+        </div>
+      )}
+
+      <ConfirmModal
+        open={!!confirmDeleteId}
+        title="Rechnung löschen?"
+        message="Diese Rechnung wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden."
+        confirmLabel="Löschen"
+        danger
+        onConfirm={() => confirmDeleteId && deleteRechnung(confirmDeleteId)}
+        onCancel={() => setConfirmDeleteId(null)}
+      />
+
+      <ConfirmModal
+        open={!!confirmVersionId}
+        title="Neue Version erstellen?"
+        message={`Neue Version von Rechnung #${confirmVersionId?.number} erstellen? Das Original bleibt gesperrt.`}
+        confirmLabel="Neue Version erstellen"
+        onConfirm={() => confirmVersionId && handleNewVersion(confirmVersionId)}
+        onCancel={() => setConfirmVersionId(null)}
+      />
     </DashboardLayout>
   );
 }

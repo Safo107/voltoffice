@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Users, FileText, Briefcase, Clock,
   Receipt, FileDown, Database, UserCheck, Calculator,
   Zap, Settings, ChevronRight, Lock, Crown,
-  ChevronLeft, PanelLeftClose, PanelLeftOpen, TrendingUp,
+  ChevronLeft, PanelLeftClose, PanelLeftOpen, TrendingUp, ShoppingCart,
 } from "lucide-react";
 import { usePro } from "@/context/ProContext";
 
@@ -24,6 +24,7 @@ const freeItems: NavItem[] = [
   { label: "Angebote", href: "/angebote", icon: <FileText size={18} /> },
   { label: "Projekte", href: "/projekte", icon: <Briefcase size={18} /> },
   { label: "Zeiterfassung", href: "/zeiterfassung", icon: <Clock size={18} />, pro: true },
+  { label: "Einkaufsliste", href: "/einkaufsliste", icon: <ShoppingCart size={18} />, pro: true },
 ];
 
 const proItems: NavItem[] = [

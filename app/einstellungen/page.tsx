@@ -81,6 +81,8 @@ export default function EinstellungenPage() {
   const [firmaLoading, setFirmaLoading] = useState(false);
   const [firmaLogo, setFirmaLogo] = useState<string | null>(null);
   const [logoUploading, setLogoUploading] = useState(false);
+  const [firmaError, setFirmaError] = useState("");
+  const [logoError, setLogoError] = useState("");
 
   // Benachrichtigungen
   const [notif, setNotif] = useState({
@@ -122,15 +124,20 @@ export default function EinstellungenPage() {
         window.location.href = data.url;
       } else {
         setPortalError(data.error || "Verbindung zum Zahlungsanbieter fehlgeschlagen.");
-        setTimeout(() => setPortalError(""), 8000);
       }
     } catch {
       setPortalError("Netzwerkfehler – bitte Internetverbindung prüfen und erneut versuchen.");
-      setTimeout(() => setPortalError(""), 8000);
     } finally {
       setPortalLoading(false);
     }
   };
+
+  // portalError auto-dismiss
+  useEffect(() => {
+    if (!portalError) return;
+    const t = setTimeout(() => setPortalError(""), 8000);
+    return () => clearTimeout(t);
+  }, [portalError]);
 
   // Firmendaten laden
   useEffect(() => {
@@ -174,7 +181,7 @@ export default function EinstellungenPage() {
       });
       save(setFirmaSaved);
     } catch {
-      alert("Speichern fehlgeschlagen.");
+      setFirmaError("Speichern fehlgeschlagen.");
     } finally {
       setFirmaLoading(false);
     }
@@ -189,11 +196,12 @@ export default function EinstellungenPage() {
       const data = await res.json();
       if (res.ok) {
         setFirmaLogo(data.logoUrl);
+        setLogoError("");
       } else {
-        alert(data.error || "Upload fehlgeschlagen.");
+        setLogoError(data.error || "Upload fehlgeschlagen.");
       }
     } catch {
-      alert("Upload fehlgeschlagen.");
+      setLogoError("Upload fehlgeschlagen.");
     } finally {
       setLogoUploading(false);
     }
@@ -409,6 +417,7 @@ export default function EinstellungenPage() {
                       />
                     </label>
                     <p className="text-xs mt-1.5" style={{ color: "#4a5568" }}>PNG, JPG oder WebP · max. 200 KB</p>
+                    {logoError && <p className="text-xs mt-1" style={{ color: "#ef4444" }}>{logoError}</p>}
                     {firmaLogo && (
                       <button
                         onClick={async () => {
@@ -504,6 +513,7 @@ export default function EinstellungenPage() {
                       Firmendaten speichern
                     </button>
                     <SaveFeedback visible={firmaSaved} />
+                    {firmaError && <p className="text-xs" style={{ color: "#ef4444" }}>{firmaError}</p>}
                   </div>
                 </div>
               </div>

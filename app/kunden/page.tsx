@@ -9,6 +9,7 @@ import Modal from "@/components/ui/Modal";
 import EmptyState from "@/components/ui/EmptyState";
 import UpgradeModal from "@/components/ui/UpgradeModal";
 import PlanLimitBar from "@/components/ui/PlanLimitBar";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 import {
   Users,
   Plus,
@@ -58,6 +59,7 @@ export default function KundenPage() {
   const [saving, setSaving] = useState(false);
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [confirmKunde, setConfirmKunde] = useState<Customer | null>(null);
 
   useEffect(() => {
     fetchKunden();
@@ -136,16 +138,19 @@ export default function KundenPage() {
     }
   };
 
-  const handleDelete = async (kunde: Customer) => {
-    if (!confirm(`Kunde "${kunde.name}" wirklich löschen?`)) return;
-    const id = kunde._id || kunde.id;
+  const handleDelete = (kunde: Customer) => {
+    setConfirmKunde(kunde);
+    setMenuOpen(null);
+  };
+
+  const confirmDelete = async () => {
+    if (!confirmKunde) return;
+    const id = confirmKunde._id || confirmKunde.id;
     try {
       await authFetch(`/api/kunden/${id}`, { method: "DELETE" });
       await fetchKunden();
-    } catch {
-      //
-    }
-    setMenuOpen(null);
+    } catch { /* ignore */ }
+    setConfirmKunde(null);
   };
 
   const filtered = kunden.filter(
@@ -431,6 +436,16 @@ export default function KundenPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmModal
+        open={!!confirmKunde}
+        title="Kunde löschen?"
+        message={`Kunde „${confirmKunde?.name}" wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.`}
+        confirmLabel="Löschen"
+        danger
+        onConfirm={confirmDelete}
+        onCancel={() => setConfirmKunde(null)}
+      />
     </DashboardLayout>
   );
 }

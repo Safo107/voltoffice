@@ -22,6 +22,7 @@ export default function ExportPage() {
   const [loadingList, setLoadingList] = useState(false);
   const [downloading, setDownloading] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
+  const [pdfError, setPdfError] = useState("");
 
   useEffect(() => {
     if (isPro) {
@@ -38,14 +39,14 @@ export default function ExportPage() {
     setDone(null);
     try {
       const res = await authFetch(`/api/angebote/${id}/pdf`);
-      if (!res.ok) return alert("PDF konnte nicht erstellt werden.");
+      if (!res.ok) { setPdfError("PDF konnte nicht erstellt werden."); return; }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
       a.download = `Angebot.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
+      try { a.click(); } finally { URL.revokeObjectURL(url); }
+      setPdfError("");
       setDone(id);
       setTimeout(() => setDone(null), 3000);
     } finally {
@@ -167,6 +168,15 @@ export default function ExportPage() {
               </button>
             </div>
           ))}
+        </div>
+      )}
+      {pdfError && (
+        <div
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-3 rounded-xl text-sm font-medium shadow-xl cursor-pointer"
+          style={{ background: "#ef444420", border: "1px solid #ef444440", color: "#ef4444" }}
+          onClick={() => setPdfError("")}
+        >
+          {pdfError}
         </div>
       )}
     </DashboardLayout>
