@@ -14,7 +14,10 @@ export async function POST(req: NextRequest) {
   const sig = req.headers.get("stripe-signature");
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
-  if (!sig || !webhookSecret) {
+  if (!webhookSecret) {
+    return NextResponse.json({ error: "STRIPE_WEBHOOK_SECRET nicht konfiguriert" }, { status: 503 });
+  }
+  if (!sig) {
     return NextResponse.json({ error: "Webhook-Signatur fehlt" }, { status: 400 });
   }
 

@@ -5,11 +5,12 @@ import { getDb } from "@/lib/mongodb";
 // Authorization: Bearer ${CRON_SECRET}
 export async function GET(req: NextRequest) {
   const secret = process.env.CRON_SECRET;
-  if (secret) {
-    const auth = req.headers.get("authorization");
-    if (auth !== `Bearer ${secret}`) {
-      return NextResponse.json({ error: "Nicht autorisiert" }, { status: 401 });
-    }
+  if (!secret) {
+    return NextResponse.json({ error: "CRON_SECRET nicht konfiguriert" }, { status: 503 });
+  }
+  const auth = req.headers.get("authorization");
+  if (auth !== `Bearer ${secret}`) {
+    return NextResponse.json({ error: "Nicht autorisiert" }, { status: 401 });
   }
 
   try {
