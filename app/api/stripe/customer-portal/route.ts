@@ -16,15 +16,28 @@ export const POST = withAuth(async (req, userId) => {
     const db = await getDb();
     const userDoc = await db.collection("users").findOne({ uid: userId });
 
-    if (!userDoc?.stripeCustomerId) {
-      return NextResponse.json(
-        { error: "Kein aktives Zahlungskonto gefunden. Bitte schließe zuerst ein Abonnement ab oder kontaktiere den Support." },
-        { status: 400 }
+    if (!userDoc) {
+      return NextResponse.json({ error: "Benutzer nicht gefunden" }, { status: 404 });
+    }
+
+    let customerId: string = userDoc.stripeCustomerId;
+
+    // Kein Stripe-Customer vorhanden → automatisch anlegen und speichern
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email: userDoc.email || undefined,
+        metadata: { uid: userId },
+      });
+      customerId = customer.id;
+      await db.collection("users").updateOne(
+        { uid: userId },
+        { $set: { stripeCustomerId: customerId } }
       );
+      console.log(`[customer-portal] Neuer Stripe Customer angelegt: ${customerId} für uid=${userId}`);
     }
 
     const session = await stripe.billingPortal.sessions.create({
-      customer: userDoc.stripeCustomerId,
+      customer: customerId,
       return_url: redirectUrl,
     });
 
