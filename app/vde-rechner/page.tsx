@@ -438,7 +438,7 @@ export default function VdeRechnerPage() {
               <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "#4a6fa5" }}>Kabelempfehlung</p>
               <p className="text-sm font-bold" style={{ color: "#e6edf3" }}>
                 {material === "cu" ? "NYM-J" : "NAYY"}{" "}
-                {phasig === 3 ? `3x${lsResult.qs}` : `2x${lsResult.qs}`} mm²
+                {phasig === 3 ? `5x${lsResult.qs}` : `3x${lsResult.qs}`} mm²
               </p>
               <p className="text-xs mt-1" style={{ color: "#4a6fa5" }}>LS-Schalter ≤ {inNenn} A</p>
             </div>
